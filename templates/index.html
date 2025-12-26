@@ -1160,9 +1160,15 @@ style: "friendly"
                 html += '<div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">';
                 for (const acc of data.accounts) {
                     const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
+                    let resetInfo = '';
+                    if (acc.reset_in_hours !== undefined && acc.reset_in_hours !== null && acc.used > 0) {
+                        const hours = Math.floor(acc.reset_in_hours);
+                        const mins = Math.round((acc.reset_in_hours - hours) * 60);
+                        resetInfo = `<br><span style="color:#f59e0b;font-size:0.8rem">⏱ ${hours}s ${mins}dk sonra sıfırlanacak</span>`;
+                    }
                     html += `<div style="background:rgba(0,0,0,0.2);padding:0.5rem 1rem;border-radius:8px;border-left:3px solid ${color}">
                         <strong>Hesap ${acc.account_id}</strong><br>
-                        <span style="color:${color}">${acc.remaining}/${dailyLimit} kalan</span>
+                        <span style="color:${color}">${acc.remaining}/${dailyLimit} kalan</span>${resetInfo}
                     </div>`;
                 }
                 html += '</div>';
@@ -1190,9 +1196,15 @@ style: "friendly"
             for (const acc of data.accounts) {
                 const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
                 const bgColor = acc.remaining > 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+                let resetText = '';
+                if (acc.reset_in_hours !== undefined && acc.reset_in_hours !== null && acc.used > 0) {
+                    const hours = Math.floor(acc.reset_in_hours);
+                    const mins = Math.round((acc.reset_in_hours - hours) * 60);
+                    resetText = ` | ⏱${hours}s${mins}dk`;
+                }
                 html += `<div style="background:${bgColor};padding:0.4rem 0.8rem;border-radius:6px;border:1px solid ${color};font-size:0.85rem;">
                     <strong style="color:${color}">Hesap ${acc.account_id}:</strong>
-                    <span style="color:#a1a1aa">${acc.used}/${dailyLimit} kullanildi</span>
+                    <span style="color:#a1a1aa">${acc.used}/${dailyLimit} kullanildi${resetText}</span>
                 </div>`;
             }
             html += '</div>';

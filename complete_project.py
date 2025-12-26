@@ -77,7 +77,8 @@ def complete_missing_items(
     image_prompts: Dict[int, str] = None,
     video_prompts: Dict[int, str] = None,
     voice_text: str = "",
-    progress_callback: Callable = None
+    progress_callback: Callable = None,
+    selected_account: str = "auto"
 ) -> Dict[str, Any]:
     """
     Eksik görsel ve videoları tamamla, render yap
@@ -88,6 +89,7 @@ def complete_missing_items(
         video_prompts: Eksik videolar için promptlar {index: prompt}
         voice_text: Seslendirme metni (render için)
         progress_callback: İlerleme callback'i
+        selected_account: Gemini Pro hesap seçimi ("auto" veya "1", "2", "3")
 
     Returns:
         Sonuç dict'i
@@ -159,119 +161,289 @@ def complete_missing_items(
         logger.info(f"  Mevcut videolar: {missing['existing_videos']}")
         logger.info(f"========================================")
 
-        # 2. Eksik görselleri oluştur (Gemini)
-        if missing_images:
-            progress_callback(f"Eksik görseller oluşturuluyor ({len(missing_images)} adet)...", 10)
+        # Gemini Pro mu yoksa Gemini + Grok mu kullanılacak?
+        use_gemini_pro = selected_account != "auto"
 
-            gemini = GeminiImageGenerator(
-                project_name=project_name,
-                progress_callback=progress_callback
-            )
-            gemini.project_dir = project_dir
+        if use_gemini_pro:
+            # ===== GEMINI PRO MODU =====
+            from gemini_pro_manager import GeminiProManager
+            from watermark_remover import remove_watermark
+            from video_watermark_remover import remove_video_watermark
+            import time
 
-            if not gemini.start_browser():
-                result["error"] = "Gemini tarayıcı başlatılamadı"
+            account_id = int(selected_account)
+            logger.info(f"Gemini Pro modu - Hesap {account_id} kullanılacak")
+
+            gemini_pro = GeminiProManager()
+            acc = gemini_pro.get_account_by_id(account_id)
+
+            if not acc:
+                result["error"] = f"Hesap {account_id} bulunamadı"
                 return result
 
-            if not gemini.navigate_to_gemini():
-                gemini.close()
-                result["error"] = "Gemini'ye gidilemedi"
-                return result
+            # Tarayıcıyı başlat
+            if not acc.is_browser_alive():
+                progress_callback(f"Hesap {account_id} tarayıcısı açılıyor...", 10)
+                acc.start_browser()
+                acc.driver.get("https://gemini.google.com")
+                time.sleep(3)
 
-            for loop_idx, idx in enumerate(missing_images):
-                logger.info(f"=== GÖRSEL DÖNGÜSÜ: {loop_idx + 1}/{len(missing_images)}, index={idx} ===")
+            # Eksik görsel ve videoları birlikte işle
+            all_missing = list(set(missing_images) | set(missing_videos))
+            all_missing.sort()
 
-                # Prompt varsa kullan, yoksa varsayılan
-                prompt = image_prompts.get(idx) or image_prompts.get(str(idx)) or f"Beautiful visual scene {idx}, high quality, detailed"
-                logger.info(f"Kullanılacak prompt: {prompt[:100]}...")
+            for loop_idx, idx in enumerate(all_missing):
+                logger.info(f"=== GEMINI PRO DÖNGÜSÜ: {loop_idx + 1}/{len(all_missing)}, index={idx} ===")
 
-                progress_callback(f"Görsel {idx}/{len(missing_images)} oluşturuluyor...", 15 + (loop_idx * 10))
+                needs_image = idx in missing_images
+                needs_video = idx in missing_videos
 
-                try:
-                    # İlk görsel için yeni chat başlatma (zaten Gemini'deyiz)
-                    # Sonrakiler için yeni chat başlat
-                    should_start_new_chat = (loop_idx > 0)
-                    img_result = gemini.generate_single_image(prompt, image_index=idx, start_new_chat=should_start_new_chat)
+                # Prompt al
+                img_prompt = image_prompts.get(idx) or image_prompts.get(str(idx)) or f"Beautiful visual scene {idx}, high quality, detailed"
+                vid_prompt = video_prompts.get(idx) or video_prompts.get(str(idx)) or "Smooth cinematic motion, gentle camera movement"
 
-                    if img_result.get("success"):
-                        result["completed_images"].append(idx)
-                        logger.info(f"✓ Görsel {idx} tamamlandı")
-                    else:
-                        logger.warning(f"✗ Görsel {idx} oluşturulamadı: {img_result.get('error')}")
-                except Exception as e:
-                    logger.error(f"✗ Görsel {idx} exception: {e}")
-                    import traceback
-                    traceback.print_exc()
+                progress_pct = 15 + int((loop_idx / len(all_missing)) * 60)
 
-                # Her görsel arasında kısa bekleme
-                import time
-                time.sleep(2)
-
-            gemini.close()
-
-        # 3. Eksik videoları oluştur (Grok)
-        # Önce hangi videoların oluşturulabileceğini kontrol et (görseli olan)
-        existing_images = set(missing["existing_images"]) | set(result["completed_images"])
-        videos_to_create = [v for v in missing_videos if v in existing_images]
-
-        if videos_to_create:
-            progress_callback(f"Eksik videolar oluşturuluyor ({len(videos_to_create)} adet)...", 50)
-
-            grok = GrokVideoGenerator(
-                project_dir=project_dir,
-                progress_callback=progress_callback
-            )
-
-            if not grok.start_browser():
-                result["error"] = "Grok tarayıcı başlatılamadı"
-                return result
-
-            if not grok.navigate_to_grok_imagine():
-                grok.close()
-                result["error"] = "Grok Imagine'e gidilemedi"
-                return result
-
-            for loop_idx, idx in enumerate(videos_to_create):
-                logger.info(f"=== VIDEO DÖNGÜSÜ: {loop_idx + 1}/{len(videos_to_create)}, index={idx} ===")
-
-                # İlk video değilse yeni chat başlat (önceki video sonrası sayfa durumu değişmiş olabilir)
+                # İlk işlem değilse yeni chat başlat
                 if loop_idx > 0:
-                    logger.info("Bir sonraki video için yeni chat başlatılıyor...")
-                    grok.start_new_chat()
+                    acc.new_chat()
+                    time.sleep(2)
 
-                image_path = os.path.join(project_dir, f"image_{idx}_cleaned.png")
-                if not os.path.exists(image_path):
-                    logger.warning(f"Video {idx} için görsel bulunamadı: {image_path}")
-                    continue
+                if needs_image and needs_video:
+                    # Hem görsel hem video lazım
+                    progress_callback(f"Görsel ve video {idx} oluşturuluyor...", progress_pct)
 
-                # Prompt varsa kullan, yoksa varsayılan
-                prompt = video_prompts.get(idx) or video_prompts.get(str(idx)) or "Smooth cinematic motion, gentle camera movement"
-                logger.info(f"Kullanılacak video prompt: {prompt[:100]}...")
+                    try:
+                        # 1. Görsel oluştur
+                        logger.info(f"Görsel {idx} oluşturuluyor...")
+                        previous_count = acc._count_generated_images()
 
-                progress_callback(f"Video {idx}/{len(videos_to_create)} oluşturuluyor...", 55 + (loop_idx * 10))
+                        if not acc.send_prompt(img_prompt):
+                            logger.error(f"Görsel {idx} prompt gönderilemedi")
+                            continue
 
-                try:
-                    vid_result = grok.generate_video_from_image(
-                        image_path=image_path,
-                        video_prompt=prompt,
-                        output_filename=f"video_{idx}.mp4"
-                    )
+                        if not acc.wait_for_image_generation(previous_count):
+                            logger.error(f"Görsel {idx} oluşturulamadı")
+                            continue
 
-                    if vid_result.get("success"):
-                        result["completed_videos"].append(idx)
-                        logger.info(f"✓ Video {idx} tamamlandı")
-                    else:
-                        logger.warning(f"✗ Video {idx} oluşturulamadı: {vid_result.get('error')}")
-                except Exception as e:
-                    logger.error(f"✗ Video {idx} exception: {e}")
-                    import traceback
-                    traceback.print_exc()
+                        # Görseli kaydet
+                        raw_image_path = os.path.join(project_dir, f"image_{idx}_raw.png")
+                        cleaned_image_path = os.path.join(project_dir, f"image_{idx}_cleaned.png")
 
-                # Her video arasında kısa bekleme
-                import time
+                        downloaded = acc.download_latest_image(raw_image_path)
+                        if downloaded:
+                            # Watermark temizle
+                            remove_watermark(raw_image_path, cleaned_image_path)
+                            result["completed_images"].append(idx)
+                            logger.info(f"✓ Görsel {idx} tamamlandı")
+
+                            # 2. Yeni chat başlat ve video oluştur
+                            acc.new_chat()
+                            time.sleep(2)
+
+                            logger.info(f"Video {idx} oluşturuluyor...")
+                            full_video_prompt = f"Turn this image into a video. Animate this image as a 5-8 second cinematic video. {vid_prompt}"
+
+                            if not acc.upload_and_prompt(cleaned_image_path, full_video_prompt):
+                                logger.error(f"Video {idx} için görsel yüklenemedi")
+                                continue
+
+                            previous_video_count = acc._count_generated_videos()
+                            if acc.wait_for_video_generation(previous_video_count):
+                                raw_video_path = os.path.join(project_dir, f"video_{idx}_raw.mp4")
+                                final_video_path = os.path.join(project_dir, f"video_{idx}.mp4")
+
+                                video_downloaded = acc.download_latest_video(raw_video_path)
+                                if video_downloaded:
+                                    # Video watermark temizle
+                                    remove_video_watermark(raw_video_path, final_video_path)
+                                    result["completed_videos"].append(idx)
+                                    logger.info(f"✓ Video {idx} tamamlandı")
+
+                    except Exception as e:
+                        logger.error(f"✗ Görsel+Video {idx} exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                elif needs_image:
+                    # Sadece görsel lazım
+                    progress_callback(f"Görsel {idx} oluşturuluyor...", progress_pct)
+
+                    try:
+                        previous_count = acc._count_generated_images()
+
+                        if not acc.send_prompt(img_prompt):
+                            logger.error(f"Görsel {idx} prompt gönderilemedi")
+                            continue
+
+                        if not acc.wait_for_image_generation(previous_count):
+                            logger.error(f"Görsel {idx} oluşturulamadı")
+                            continue
+
+                        raw_image_path = os.path.join(project_dir, f"image_{idx}_raw.png")
+                        cleaned_image_path = os.path.join(project_dir, f"image_{idx}_cleaned.png")
+
+                        downloaded = acc.download_latest_image(raw_image_path)
+                        if downloaded:
+                            remove_watermark(raw_image_path, cleaned_image_path)
+                            result["completed_images"].append(idx)
+                            logger.info(f"✓ Görsel {idx} tamamlandı")
+
+                    except Exception as e:
+                        logger.error(f"✗ Görsel {idx} exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                elif needs_video:
+                    # Sadece video lazım (görsel var)
+                    image_path = os.path.join(project_dir, f"image_{idx}_cleaned.png")
+                    if not os.path.exists(image_path):
+                        logger.warning(f"Video {idx} için görsel bulunamadı: {image_path}")
+                        continue
+
+                    progress_callback(f"Video {idx} oluşturuluyor...", progress_pct)
+
+                    try:
+                        full_video_prompt = f"Turn this image into a video. Animate this image as a 5-8 second cinematic video. {vid_prompt}"
+
+                        if not acc.upload_and_prompt(image_path, full_video_prompt):
+                            logger.error(f"Video {idx} için görsel yüklenemedi")
+                            continue
+
+                        previous_video_count = acc._count_generated_videos()
+                        if acc.wait_for_video_generation(previous_video_count):
+                            raw_video_path = os.path.join(project_dir, f"video_{idx}_raw.mp4")
+                            final_video_path = os.path.join(project_dir, f"video_{idx}.mp4")
+
+                            video_downloaded = acc.download_latest_video(raw_video_path)
+                            if video_downloaded:
+                                remove_video_watermark(raw_video_path, final_video_path)
+                                result["completed_videos"].append(idx)
+                                logger.info(f"✓ Video {idx} tamamlandı")
+
+                    except Exception as e:
+                        logger.error(f"✗ Video {idx} exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                # Her işlem arasında kısa bekleme
                 time.sleep(2)
 
-            grok.close()
+        else:
+            # ===== GEMİNİ + GROK MODU =====
+            # 2. Eksik görselleri oluştur (Gemini)
+            if missing_images:
+                progress_callback(f"Eksik görseller oluşturuluyor ({len(missing_images)} adet)...", 10)
+
+                gemini = GeminiImageGenerator(
+                    project_name=project_name,
+                    progress_callback=progress_callback
+                )
+                gemini.project_dir = project_dir
+
+                if not gemini.start_browser():
+                    result["error"] = "Gemini tarayıcı başlatılamadı"
+                    return result
+
+                if not gemini.navigate_to_gemini():
+                    gemini.close()
+                    result["error"] = "Gemini'ye gidilemedi"
+                    return result
+
+                for loop_idx, idx in enumerate(missing_images):
+                    logger.info(f"=== GÖRSEL DÖNGÜSÜ: {loop_idx + 1}/{len(missing_images)}, index={idx} ===")
+
+                    # Prompt varsa kullan, yoksa varsayılan
+                    prompt = image_prompts.get(idx) or image_prompts.get(str(idx)) or f"Beautiful visual scene {idx}, high quality, detailed"
+                    logger.info(f"Kullanılacak prompt: {prompt[:100]}...")
+
+                    progress_callback(f"Görsel {idx}/{len(missing_images)} oluşturuluyor...", 15 + (loop_idx * 10))
+
+                    try:
+                        # İlk görsel için yeni chat başlatma (zaten Gemini'deyiz)
+                        # Sonrakiler için yeni chat başlat
+                        should_start_new_chat = (loop_idx > 0)
+                        img_result = gemini.generate_single_image(prompt, image_index=idx, start_new_chat=should_start_new_chat)
+
+                        if img_result.get("success"):
+                            result["completed_images"].append(idx)
+                            logger.info(f"✓ Görsel {idx} tamamlandı")
+                        else:
+                            logger.warning(f"✗ Görsel {idx} oluşturulamadı: {img_result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"✗ Görsel {idx} exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                    # Her görsel arasında kısa bekleme
+                    import time
+                    time.sleep(2)
+
+                gemini.close()
+
+            # 3. Eksik videoları oluştur (Grok)
+            # Önce hangi videoların oluşturulabileceğini kontrol et (görseli olan)
+            existing_images = set(missing["existing_images"]) | set(result["completed_images"])
+            videos_to_create = [v for v in missing_videos if v in existing_images]
+
+            if videos_to_create:
+                progress_callback(f"Eksik videolar oluşturuluyor ({len(videos_to_create)} adet)...", 50)
+
+                grok = GrokVideoGenerator(
+                    project_dir=project_dir,
+                    progress_callback=progress_callback
+                )
+
+                if not grok.start_browser():
+                    result["error"] = "Grok tarayıcı başlatılamadı"
+                    return result
+
+                if not grok.navigate_to_grok_imagine():
+                    grok.close()
+                    result["error"] = "Grok Imagine'e gidilemedi"
+                    return result
+
+                for loop_idx, idx in enumerate(videos_to_create):
+                    logger.info(f"=== VIDEO DÖNGÜSÜ: {loop_idx + 1}/{len(videos_to_create)}, index={idx} ===")
+
+                    # İlk video değilse yeni chat başlat (önceki video sonrası sayfa durumu değişmiş olabilir)
+                    if loop_idx > 0:
+                        logger.info("Bir sonraki video için yeni chat başlatılıyor...")
+                        grok.start_new_chat()
+
+                    image_path = os.path.join(project_dir, f"image_{idx}_cleaned.png")
+                    if not os.path.exists(image_path):
+                        logger.warning(f"Video {idx} için görsel bulunamadı: {image_path}")
+                        continue
+
+                    # Prompt varsa kullan, yoksa varsayılan
+                    prompt = video_prompts.get(idx) or video_prompts.get(str(idx)) or "Smooth cinematic motion, gentle camera movement"
+                    logger.info(f"Kullanılacak video prompt: {prompt[:100]}...")
+
+                    progress_callback(f"Video {idx}/{len(videos_to_create)} oluşturuluyor...", 55 + (loop_idx * 10))
+
+                    try:
+                        vid_result = grok.generate_video_from_image(
+                            image_path=image_path,
+                            video_prompt=prompt,
+                            output_filename=f"video_{idx}.mp4"
+                        )
+
+                        if vid_result.get("success"):
+                            result["completed_videos"].append(idx)
+                            logger.info(f"✓ Video {idx} tamamlandı")
+                        else:
+                            logger.warning(f"✗ Video {idx} oluşturulamadı: {vid_result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"✗ Video {idx} exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                    # Her video arasında kısa bekleme
+                    import time
+                    time.sleep(2)
+
+                grok.close()
 
         # 4. Render yap (tüm videolar varsa)
         progress_callback("Render kontrol ediliyor...", 85)

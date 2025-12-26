@@ -1443,39 +1443,64 @@ class GeminiProManager:
             self.progress_callback(message, percentage)
 
     def _load_usage(self):
-        """Kullanım verilerini yükle"""
+        """Kullanım verilerini yükle (24 saat bazlı sıfırlama)"""
         if os.path.exists(self.usage_file):
             try:
                 with open(self.usage_file, "r") as f:
                     data = json.load(f)
 
-                today = date.today().isoformat()
+                now = datetime.now()
 
                 for account in self.accounts:
                     acc_data = data.get(f"account_{account.account_id}", {})
-                    last_date = acc_data.get("last_date")
+                    last_timestamp = acc_data.get("last_used_timestamp")
+                    usage = acc_data.get("usage", 0)
 
-                    if last_date == today:
-                        account.daily_usage = acc_data.get("usage", 0)
+                    if last_timestamp and usage > 0:
+                        # Son kullanımdan bu yana geçen süre
+                        last_used = datetime.fromisoformat(last_timestamp)
+                        hours_passed = (now - last_used).total_seconds() / 3600
+
+                        if hours_passed >= 24:
+                            # 24 saat geçti, sıfırla
+                            account.daily_usage = 0
+                            logger.info(f"Hesap {account.account_id}: 24 saat geçti, kullanım sıfırlandı")
+                        else:
+                            account.daily_usage = usage
+                            remaining_hours = 24 - hours_passed
+                            logger.info(f"Hesap {account.account_id}: {usage} kullanım, {remaining_hours:.1f} saat sonra sıfırlanacak")
                     else:
                         account.daily_usage = 0
 
-                    account.last_usage_date = today
+                    account.last_usage_timestamp = acc_data.get("last_used_timestamp")
 
             except Exception as e:
                 logger.error(f"Kullanım verisi yükleme hatası: {e}")
 
-    def _save_usage(self):
-        """Kullanım verilerini kaydet"""
+    def _save_usage(self, account_id: int = None):
+        """Kullanım verilerini kaydet (sadece belirtilen hesap veya tümü)"""
         try:
+            # Mevcut veriyi oku
             data = {}
-            today = date.today().isoformat()
+            if os.path.exists(self.usage_file):
+                with open(self.usage_file, "r") as f:
+                    data = json.load(f)
+
+            now = datetime.now().isoformat()
 
             for account in self.accounts:
-                data[f"account_{account.account_id}"] = {
-                    "usage": account.daily_usage,
-                    "last_date": today
-                }
+                acc_key = f"account_{account.account_id}"
+
+                # Sadece belirtilen hesabı veya tümünü güncelle
+                if account_id is None or account.account_id == account_id:
+                    # Eğer kullanım arttıysa timestamp'i güncelle
+                    old_usage = data.get(acc_key, {}).get("usage", 0)
+
+                    data[acc_key] = {
+                        "usage": account.daily_usage,
+                        "last_used_timestamp": now if account.daily_usage > old_usage else data.get(acc_key, {}).get("last_used_timestamp", now),
+                        "last_date": date.today().isoformat()  # Geriye uyumluluk için
+                    }
 
             with open(self.usage_file, "w") as f:
                 json.dump(data, f, indent=2)
@@ -1512,22 +1537,49 @@ class GeminiProManager:
         return None
 
     def get_daily_capacity(self) -> Dict[str, Any]:
-        """Günlük kapasiteyi göster"""
+        """Günlük kapasiteyi göster (24 saat bazlı)"""
+        # Önce usage'ı yeniden yükle (24 saat kontrolü için)
+        self._load_usage()
+
+        now = datetime.now()
         today = date.today().isoformat()
         total_remaining = 0
         account_status = []
+        daily_limit = get_daily_video_limit()
+
+        # Usage dosyasından timestamp bilgilerini al
+        usage_data = {}
+        if os.path.exists(self.usage_file):
+            try:
+                with open(self.usage_file, "r") as f:
+                    usage_data = json.load(f)
+            except:
+                pass
 
         for account in self.accounts:
-            if account.last_usage_date != today:
-                remaining = DAILY_VIDEO_LIMIT
-            else:
-                remaining = DAILY_VIDEO_LIMIT - account.daily_usage
+            acc_data = usage_data.get(f"account_{account.account_id}", {})
+            last_timestamp = acc_data.get("last_used_timestamp")
 
+            # Kalan süre hesapla
+            reset_in_hours = None
+            if last_timestamp and account.daily_usage > 0:
+                try:
+                    last_used = datetime.fromisoformat(last_timestamp)
+                    hours_passed = (now - last_used).total_seconds() / 3600
+                    if hours_passed < 24:
+                        reset_in_hours = round(24 - hours_passed, 1)
+                except:
+                    pass
+
+            remaining = daily_limit - account.daily_usage
             total_remaining += remaining
+
             account_status.append({
                 "account_id": account.account_id,
-                "used": account.daily_usage if account.last_usage_date == today else 0,
-                "remaining": remaining
+                "used": account.daily_usage,
+                "remaining": remaining,
+                "reset_in_hours": reset_in_hours,
+                "last_used": last_timestamp
             })
 
         return {

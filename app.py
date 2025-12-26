@@ -807,7 +807,9 @@ def gemini_pro_save_config():
 
 @app.route("/api/gemini-pro/update-usage", methods=["POST"])
 def gemini_pro_update_usage():
-    """Manuel olarak hesap kullanımını güncelle"""
+    """Manuel olarak hesap kullanımını güncelle (24 saat bazlı)"""
+    global gemini_pro_manager
+
     try:
         data = request.get_json()
         account_id = data.get("account_id")
@@ -826,20 +828,46 @@ def gemini_pro_update_usage():
 
         # Hesap anahtarı
         account_key = f"account_{account_id}"
+        now = datetime.now()
+
+        # Mevcut timestamp'i koru veya yeni oluştur
+        old_data = usage_data.get(account_key, {})
+        old_usage = old_data.get("usage", 0)
+
+        # Eğer kullanım artıyorsa yeni timestamp, azalıyorsa mevcut timestamp'i koru
+        if int(usage) > old_usage:
+            new_timestamp = now.isoformat()
+        elif int(usage) == 0:
+            new_timestamp = None  # Sıfırlanınca timestamp'i kaldır
+        else:
+            new_timestamp = old_data.get("last_used_timestamp")
 
         # Güncelle
-        today = datetime.now().strftime("%Y-%m-%d")
         usage_data[account_key] = {
             "usage": int(usage),
-            "last_date": today
+            "last_used_timestamp": new_timestamp,
+            "last_date": now.strftime("%Y-%m-%d")
         }
 
         # Kaydet
         with open(usage_file, "w") as f:
             json.dump(usage_data, f, indent=2)
 
+        # Manager'ı yeniden yükle
+        if gemini_pro_manager:
+            gemini_pro_manager._load_usage()
+
         logger.info(f"Hesap {account_id} kullanımı güncellendi: {usage}")
-        return jsonify({"success": True, "message": f"Hesap {account_id} kullanımı {usage} olarak güncellendi"})
+
+        # Kalan süreyi hesapla
+        reset_msg = ""
+        if new_timestamp and int(usage) > 0:
+            reset_msg = f" (24 saat sonra sıfırlanacak)"
+
+        return jsonify({
+            "success": True,
+            "message": f"Hesap {account_id} kullanımı {usage} olarak güncellendi{reset_msg}"
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
