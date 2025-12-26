@@ -1451,6 +1451,20 @@ class GeminiProManager:
 
         return None
 
+    def get_account_by_id(self, account_id: int) -> Optional[GeminiProAccount]:
+        """Belirli bir hesabı ID ile bul"""
+        today = date.today().isoformat()
+
+        for account in self.accounts:
+            if account.account_id == account_id:
+                # Günlük kullanımı güncelle
+                if account.last_usage_date != today:
+                    account.daily_usage = 0
+                    account.last_usage_date = today
+                return account
+
+        return None
+
     def get_daily_capacity(self) -> Dict[str, Any]:
         """Günlük kapasiteyi göster"""
         today = date.today().isoformat()
@@ -1572,7 +1586,7 @@ class DailyShortsMode:
         project_data["status"][str(index)] = status
         self._save_project_json(project_dir, project_data)
 
-    def create_daily_project(self, prompts: List[Dict[str, str]], voice_text: str = "", aspect_format: str = "9:16", thumbnail_prompt: str = "") -> Dict[str, Any]:
+    def create_daily_project(self, prompts: List[Dict[str, str]], voice_text: str = "", aspect_format: str = "9:16", thumbnail_prompt: str = "", selected_account: str = "auto") -> Dict[str, Any]:
         """
         Günlük shorts projesi oluştur - ADIM ADIM
 
@@ -1581,10 +1595,13 @@ class DailyShortsMode:
             voice_text: Final video için seslendirme metni
             aspect_format: Video formatı ("9:16", "16:9", "1:1")
             thumbnail_prompt: Thumbnail için prompt
+            selected_account: Kullanılacak hesap ("auto", "1", "2", "3")
         """
         self.voice_text = voice_text  # Render için sakla
         self.aspect_format = aspect_format
         self.thumbnail_prompt = thumbnail_prompt  # Thumbnail için sakla
+        self.selected_account = selected_account  # Seçilen hesap
+        logger.info(f"Proje başlatılıyor: {len(prompts)} prompt, hesap: {selected_account}")
 
         # Format açıklamaları
         # Görsel için format açıklaması
@@ -1664,12 +1681,28 @@ class DailyShortsMode:
         for i, prompt_data in enumerate(prompts, 1):
             self.manager._update_progress(f"Video {i}/{len(prompts)} işleniyor...", 10 + (i * 8))
 
-            # Uygun hesabı bul
-            account = self.manager.get_available_account()
-            if not account:
-                results["success"] = False
-                results["error"] = "Tüm hesapların limiti doldu"
-                break
+            # Hesap seçimi
+            if self.selected_account != "auto":
+                # Belirli bir hesap seçilmiş
+                account_id = int(self.selected_account)
+                account = self.manager.get_account_by_id(account_id)
+                if not account:
+                    results["success"] = False
+                    results["error"] = f"Hesap {account_id} bulunamadı"
+                    break
+                if account.daily_usage >= DAILY_VIDEO_LIMIT:
+                    results["success"] = False
+                    results["error"] = f"Hesap {account_id} günlük limitine ulaştı (3/3)"
+                    break
+            else:
+                # Otomatik mod - uygun hesabı bul
+                account = self.manager.get_available_account()
+                if not account:
+                    results["success"] = False
+                    results["error"] = "Tüm hesapların limiti doldu"
+                    break
+
+            logger.info(f"[{i}] Hesap {account.account_id} kullanılıyor (kullanım: {account.daily_usage}/3)")
 
             # Hesap tarayıcısı açık değilse aç
             if not account.driver:

@@ -354,6 +354,35 @@ style: "friendly"
                         <textarea id="geminiProVoiceText" style="height: 100px;" placeholder="Final video icin seslendirme metni... (Script formatinda otomatik doldurulur)"></textarea>
                     </div>
 
+                    <!-- Hesap Secimi -->
+                    <div id="geminiProAccountSection" class="result-card">
+                        <h4>Hesap Secimi</h4>
+                        <div id="accountStatusDisplay" style="margin-bottom: 1rem;">
+                            <!-- Hesap durumları buraya yüklenecek -->
+                        </div>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="accountSelect" value="auto" checked>
+                                <span>Otomatik (Prompt sayisina gore)</span>
+                            </label>
+                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="accountSelect" value="1">
+                                <span>Hesap 1</span>
+                            </label>
+                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="accountSelect" value="2">
+                                <span>Hesap 2</span>
+                            </label>
+                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="accountSelect" value="3">
+                                <span>Hesap 3</span>
+                            </label>
+                        </div>
+                        <p id="accountSelectionHint" style="color: #71717a; font-size: 0.75rem; margin-top: 0.5rem;">
+                            3 veya daha az prompt icin tek hesap secebilirsiniz. Daha fazla icin otomatik dagitim kullanilir.
+                        </p>
+                    </div>
+
                     <div class="button-group">
                         <button class="btn-primary" id="geminiProStartBtn" onclick="startGeminiProProject()">Baslat</button>
                         <button class="btn-danger" id="geminiProStopBtn" onclick="stopGeminiProProject()" style="display:none">Durdur</button>
@@ -961,11 +990,15 @@ style: "friendly"
 
         // ==================== GEMINI PRO FUNCTIONS ====================
 
+        // Global account data
+        let geminiProAccountData = null;
+
         // Load Gemini Pro status
         async function loadGeminiProStatus() {
             try {
                 const res = await fetch('/api/gemini-pro/status');
                 const data = await res.json();
+                geminiProAccountData = data;
 
                 const container = document.getElementById('geminiProStatus');
                 if (data.error) {
@@ -984,10 +1017,72 @@ style: "friendly"
                 }
                 html += '</div>';
                 container.innerHTML = html;
+
+                // Hesap seçimi bölümünü de güncelle
+                updateAccountStatusDisplay(data);
             } catch(e) {
                 document.getElementById('geminiProStatus').innerHTML = `<p style="color:#ef4444">Hata: ${e.message}</p>`;
             }
         }
+
+        // Hesap durumu görüntüle
+        function updateAccountStatusDisplay(data) {
+            const display = document.getElementById('accountStatusDisplay');
+            if (!display || !data.accounts) return;
+
+            let html = '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">';
+            for (const acc of data.accounts) {
+                const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
+                const bgColor = acc.remaining > 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+                html += `<div style="background:${bgColor};padding:0.4rem 0.8rem;border-radius:6px;border:1px solid ${color};font-size:0.85rem;">
+                    <strong style="color:${color}">Hesap ${acc.account_id}:</strong>
+                    <span style="color:#a1a1aa">${acc.used}/3 kullanildi</span>
+                </div>`;
+            }
+            html += '</div>';
+            display.innerHTML = html;
+
+            // Radio butonlarını güncelle (limiti dolan hesapları disable et)
+            for (const acc of data.accounts) {
+                const radio = document.querySelector(`input[name="accountSelect"][value="${acc.account_id}"]`);
+                if (radio) {
+                    radio.disabled = acc.remaining <= 0;
+                    const label = radio.closest('label');
+                    if (label) {
+                        label.style.opacity = acc.remaining <= 0 ? '0.5' : '1';
+                    }
+                }
+            }
+        }
+
+        // Prompt sayısına göre hesap seçimini kontrol et
+        function updateAccountSelectionHint() {
+            const promptText = document.getElementById('geminiProPrompts').value.trim();
+            const lines = promptText.split('\n').filter(l => l.trim());
+            const promptCount = lines.length;
+            const hint = document.getElementById('accountSelectionHint');
+
+            if (promptCount > 3) {
+                hint.textContent = `${promptCount} prompt var - birden fazla hesap gerekiyor, otomatik dagitim yapilacak.`;
+                hint.style.color = '#f59e0b';
+                // 3'ten fazla ise otomatik seç
+                document.querySelector('input[name="accountSelect"][value="auto"]').checked = true;
+            } else if (promptCount > 0) {
+                hint.textContent = `${promptCount} prompt var - tek hesap yeterli, istediginizi secebilirsiniz.`;
+                hint.style.color = '#22c55e';
+            } else {
+                hint.textContent = '3 veya daha az prompt icin tek hesap secebilirsiniz. Daha fazla icin otomatik dagitim kullanilir.';
+                hint.style.color = '#71717a';
+            }
+        }
+
+        // Prompt değiştiğinde hesap seçimini güncelle
+        document.addEventListener('DOMContentLoaded', function() {
+            const promptTextarea = document.getElementById('geminiProPrompts');
+            if (promptTextarea) {
+                promptTextarea.addEventListener('input', updateAccountSelectionHint);
+            }
+        });
 
         // Setup Gemini Pro accounts
         async function setupGeminiProAccounts() {
@@ -1206,12 +1301,18 @@ style: "friendly"
                     thumbnailPrompt = window.lastParsedScript.thumbnailPrompt || '';
                 }
 
+                // Seçilen hesabı al
+                const selectedAccount = document.querySelector('input[name="accountSelect"]:checked').value;
+
                 const body = {
                     prompts,
                     voice_text: voiceText,
                     format: format,
-                    thumbnail_prompt: thumbnailPrompt
+                    thumbnail_prompt: thumbnailPrompt,
+                    selected_account: selectedAccount  // "auto", "1", "2", veya "3"
                 };
+
+                console.log(`Starting with ${prompts.length} prompts, account: ${selectedAccount}`);
 
                 const res = await fetch(endpoint, {
                     method: 'POST',

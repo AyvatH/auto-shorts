@@ -839,16 +839,28 @@ def gemini_pro_daily_shorts():
     voice_text = data.get("voice_text", "")  # Seslendirme metni
     aspect_format = data.get("format", "9:16")  # Video formatı
     thumbnail_prompt = data.get("thumbnail_prompt", "")  # Thumbnail prompt
+    selected_account = data.get("selected_account", "auto")  # "auto", "1", "2", veya "3"
+
+    logger.info(f"Gelen istek: {len(prompts)} prompt, hesap: {selected_account}")
 
     if not prompts:
         with task_lock:
             current_task["running"] = False
         return jsonify({"error": "Prompt listesi gerekli"}), 400
 
-    if len(prompts) > 9:
-        with task_lock:
-            current_task["running"] = False
-        return jsonify({"error": "Günde maksimum 9 video"}), 400
+    # Hesap kontrolü
+    if selected_account != "auto":
+        # Tek hesap seçildi, max 3 prompt
+        if len(prompts) > 3:
+            with task_lock:
+                current_task["running"] = False
+            return jsonify({"error": f"Tek hesap için maksimum 3 video. {len(prompts)} prompt için 'Otomatik' seçin."}), 400
+    else:
+        # Otomatik mod, max 9 prompt
+        if len(prompts) > 9:
+            with task_lock:
+                current_task["running"] = False
+            return jsonify({"error": "Günde maksimum 9 video"}), 400
 
     def run_shorts():
         global gemini_pro_manager, current_task
@@ -897,11 +909,11 @@ def gemini_pro_daily_shorts():
             logger.info("Tüm hesaplar hazır!")
             update_progress("Tüm hesaplar hazır, proje başlıyor...", 25)
 
-            logger.info(f"DailyShortsMode oluşturuluyor, prompts={len(prompts)}")
+            logger.info(f"DailyShortsMode oluşturuluyor, prompts={len(prompts)}, hesap={selected_account}")
             shorts_mode = DailyShortsMode(gemini_pro_manager)
 
             logger.info("create_daily_project çağrılıyor...")
-            result = shorts_mode.create_daily_project(prompts, voice_text, aspect_format, thumbnail_prompt)
+            result = shorts_mode.create_daily_project(prompts, voice_text, aspect_format, thumbnail_prompt, selected_account)
             logger.info(f"create_daily_project sonuç: {result}")
 
             with task_lock:
