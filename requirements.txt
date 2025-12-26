@@ -1,0 +1,8 @@
+flask>=2.3.0
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+undetected-chromedriver>=3.5.0
+edge-tts>=7.0.0
+moviepy>=2.0.0

@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Chrome profiles (contains session data)
+chrome_profile/
+chrome_profile_grok/
+chrome_profiles/
+
+# Project outputs (generated content)
+projects/
+gemini_pro_projects/
+
+# Logs
+logs/
+*.log
+
+# Usage tracking
+gemini_pro_usage.json
+
+# Backups
+backups/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Claude
+.claude/

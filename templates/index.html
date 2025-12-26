@@ -1,0 +1,1736 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Shorts Generator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e4e4e7;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+        header {
+            text-align: center; margin-bottom: 1rem; padding: 1rem;
+            background: rgba(255, 255, 255, 0.05); border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #a1a1aa; font-size: 0.85rem; }
+
+        /* Tabs */
+        .tab-nav {
+            display: flex; gap: 0.5rem; margin-bottom: 1.5rem;
+            background: rgba(0, 0, 0, 0.2); padding: 0.5rem; border-radius: 12px;
+        }
+        .tab-btn {
+            flex: 1; padding: 0.75rem 1.5rem; border: none; border-radius: 8px;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
+            background: transparent; color: #a1a1aa; transition: all 0.3s;
+        }
+        .tab-btn:hover { background: rgba(255, 255, 255, 0.1); color: #e4e4e7; }
+        .tab-btn.active { background: linear-gradient(90deg, #00d4ff, #7c3aed); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Panels */
+        .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        @media (max-width: 900px) { .main-content { grid-template-columns: 1fr; } }
+        .panel {
+            background: rgba(255, 255, 255, 0.05); border-radius: 16px;
+            padding: 1.5rem; border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .panel-title {
+            font-size: 1.1rem; color: #00d4ff; margin-bottom: 1rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+
+        /* Forms */
+        textarea, input[type="text"] {
+            width: 100%; background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px;
+            color: #e4e4e7; font-family: 'Fira Code', monospace; font-size: 0.85rem;
+            padding: 1rem; resize: vertical; transition: border-color 0.3s;
+        }
+        textarea:focus, input:focus { outline: none; border-color: #00d4ff; }
+        textarea { height: 280px; }
+
+        /* Buttons */
+        .button-group { display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap; }
+        button {
+            padding: 0.6rem 1.2rem; border: none; border-radius: 8px;
+            font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.3s;
+        }
+        .btn-primary { background: linear-gradient(90deg, #00d4ff, #7c3aed); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0, 212, 255, 0.4); }
+        .btn-secondary { background: rgba(255, 255, 255, 0.1); color: #e4e4e7; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.2); }
+        .btn-warning { background: linear-gradient(90deg, #f59e0b, #d97706); color: white; }
+        .btn-success { background: linear-gradient(90deg, #22c55e, #16a34a); color: white; }
+        .btn-danger { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; }
+        .btn-purple { background: linear-gradient(90deg, #7c3aed, #5b21b6); color: white; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.75rem; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+        /* Progress */
+        .progress-section { margin-top: 1.5rem; }
+        .progress-bar-container { background: rgba(0, 0, 0, 0.3); border-radius: 8px; height: 8px; overflow: hidden; margin-bottom: 0.5rem; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #00d4ff, #7c3aed); width: 0%; transition: width 0.3s; }
+        .progress-text { font-size: 0.85rem; color: #a1a1aa; display: flex; justify-content: space-between; }
+        .status-indicator { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; background: rgba(0, 0, 0, 0.3); border-radius: 20px; font-size: 0.8rem; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #71717a; }
+        .status-dot.running { background: #00d4ff; animation: pulse 1.5s infinite; }
+        .status-dot.success { background: #22c55e; }
+        .status-dot.error { background: #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Results */
+        .result-card { background: rgba(0, 0, 0, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        .result-card h4 { color: #00d4ff; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .image-preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+        .image-preview img { width: 100%; height: auto; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.1); transition: all 0.3s; }
+        .image-preview img:hover { transform: scale(1.05); border-color: #00d4ff; }
+
+        /* Logs */
+        .log-output { background: rgba(0, 0, 0, 0.4); border-radius: 8px; padding: 1rem; font-family: 'Fira Code', monospace; font-size: 0.75rem; max-height: 180px; overflow-y: auto; color: #a1a1aa; }
+        .log-entry { padding: 0.2rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        .log-time { color: #71717a; }
+        .log-info { color: #00d4ff; }
+        .log-success { color: #22c55e; }
+        .log-error { color: #ef4444; }
+        .log-warning { color: #f59e0b; }
+        .empty-state { text-align: center; padding: 2rem; color: #71717a; }
+
+        /* Projects Grid */
+        .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
+        .project-card {
+            background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.25rem;
+            border: 2px solid rgba(255, 255, 255, 0.1); transition: all 0.3s; cursor: pointer;
+        }
+        .project-card:hover { border-color: #00d4ff; transform: translateY(-2px); }
+        .project-card.complete { border-color: #22c55e; }
+        .project-card.incomplete { border-color: #f59e0b; }
+        .project-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+        .project-name { font-size: 0.9rem; font-weight: 600; color: #00d4ff; }
+        .project-date { font-size: 0.7rem; color: #71717a; }
+        .project-status { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
+        .project-status.complete { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .project-status.incomplete { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .project-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; }
+        .stat-item { text-align: center; padding: 0.4rem; background: rgba(0, 0, 0, 0.2); border-radius: 6px; }
+        .stat-value { font-size: 1.1rem; font-weight: 700; color: #e4e4e7; }
+        .stat-label { font-size: 0.65rem; color: #71717a; text-transform: uppercase; }
+        .stat-item.missing .stat-value { color: #f59e0b; }
+        .project-preview { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; overflow-x: auto; }
+        .project-preview img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .project-actions { display: flex; gap: 0.5rem; }
+        .project-actions button { flex: 1; padding: 0.5rem; font-size: 0.75rem; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85); z-index: 1000;
+            justify-content: center; align-items: flex-start; padding: 2rem; overflow-y: auto;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: #1a1a2e; border-radius: 16px; max-width: 1200px; width: 100%;
+            padding: 1.5rem; border: 1px solid rgba(255, 255, 255, 0.1); margin: auto;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .modal-title { font-size: 1.3rem; color: #00d4ff; }
+        .modal-close { background: none; border: none; color: #a1a1aa; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+
+        /* Media Grid in Modal */
+        .media-section { margin-bottom: 1.5rem; }
+        .media-section-title { font-size: 1rem; color: #7c3aed; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+        .media-item {
+            background: rgba(0, 0, 0, 0.3); border-radius: 10px; padding: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.1); position: relative;
+        }
+        .media-item.missing { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .media-item.has-content { border-color: #22c55e; }
+        .media-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .media-item-title { font-size: 0.8rem; font-weight: 600; color: #e4e4e7; }
+        .media-item-status { font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 3px; }
+        .media-item-status.exists { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .media-item-status.missing { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .media-preview { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; margin-bottom: 0.5rem; background: rgba(0,0,0,0.3); }
+        .media-preview video { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; }
+        .media-prompt { width: 100%; min-height: 50px; font-size: 0.75rem; padding: 0.5rem; margin-bottom: 0.5rem; }
+        .media-actions { display: flex; gap: 0.25rem; }
+        .media-actions button { flex: 1; }
+
+        /* Voice Section */
+        .voice-section { background: rgba(124, 58, 237, 0.1); border: 1px solid #7c3aed; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; }
+        .voice-section h3 { color: #7c3aed; margin-bottom: 1rem; font-size: 1rem; }
+        .voice-grid { display: grid; grid-template-columns: 1fr 200px; gap: 1rem; }
+        @media (max-width: 600px) { .voice-grid { grid-template-columns: 1fr; } }
+        .voice-text { min-height: 80px; }
+        .voice-style { height: 40px; min-height: 40px; }
+
+        /* Action Bar */
+        .action-bar { display: flex; gap: 0.75rem; flex-wrap: wrap; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px; margin-bottom: 1.5rem; }
+        .action-bar button { flex: 1; min-width: 120px; }
+
+        /* Claude Chat */
+        .claude-section { background: rgba(0, 212, 255, 0.1); border: 1px solid #00d4ff; border-radius: 10px; padding: 1rem; margin-top: 1.5rem; }
+        .claude-section h3 { color: #00d4ff; margin-bottom: 1rem; font-size: 1rem; }
+        .claude-input-area { display: flex; gap: 0.5rem; }
+        .claude-input { flex: 1; min-height: 40px; height: 40px; }
+        .claude-output { background: rgba(0,0,0,0.3); border-radius: 8px; padding: 1rem; margin-top: 1rem; max-height: 300px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 0.8rem; white-space: pre-wrap; display: none; }
+        .claude-output.active { display: block; }
+
+        /* Final Video */
+        .final-section { background: rgba(34, 197, 94, 0.1); border: 2px solid #22c55e; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; }
+        .final-section h3 { color: #22c55e; margin-bottom: 1rem; }
+        .final-section video { width: 100%; max-height: 300px; border-radius: 8px; }
+
+        .template-hint { font-size: 0.75rem; color: #71717a; margin-top: 0.5rem; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Auto Shorts Generator</h1>
+            <p class="subtitle">Gemini + Grok + Claude CLI</p>
+        </header>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('new')">Yeni Proje</button>
+            <button class="tab-btn" onclick="switchTab('projects')">Projeler</button>
+            <button class="tab-btn" onclick="switchTab('gemini-pro')">Gemini Pro</button>
+            <button class="tab-btn" onclick="switchTab('claude')">Claude Chat</button>
+        </div>
+
+        <!-- New Project Tab -->
+        <div id="tab-new" class="tab-content active">
+            <div class="main-content">
+                <div class="panel">
+                    <h3 class="panel-title">Video Script</h3>
+                    <textarea id="scriptInput" placeholder="Video script'inizi buraya yapistirin...">---VIDEO START---
+VIDEO_COUNT: 2
+IMAGE_COUNT: 2
+[IMAGE_1]
+prompt: "ultra-realistic macro shot, soft rim light, dark background"
+[IMAGE_2]
+prompt: "3D exploded diagram, layers floating in space"
+[VIDEO_1]
+prompt: "cinematic macro intro, slow dolly-in"
+[VIDEO_2]
+prompt: "exploded 3D animation, layers separating"
+[VOICE]
+text: "Most people only see the result. Here is what truly happens."
+style: "friendly"
+---VIDEO END---</textarea>
+                    <div class="template-hint">
+                        <strong>Flow:</strong> Gemini gorsel -> Watermark temizle -> Grok video -> Ses + Altyazi -> Final
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-primary" id="generateBtn" onclick="startGeneration()">Olustur</button>
+                        <button class="btn-secondary" id="testBtn" onclick="runTest()">Test</button>
+                        <button class="btn-secondary" onclick="switchGrokAccount()">Grok Degistir</button>
+                        <button class="btn-secondary" onclick="switchGeminiAccount()">Gemini Degistir</button>
+                    </div>
+                    <div class="progress-section" id="progressSection" style="display: none;">
+                        <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+                        <div class="progress-text">
+                            <span class="status-indicator">
+                                <span class="status-dot running" id="statusDot"></span>
+                                <span id="statusText">Bekliyor...</span>
+                            </span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3 class="panel-title">Sonuclar</h3>
+                    <div id="resultsContainer">
+                        <div class="empty-state"><p>Henuz sonuc yok</p></div>
+                    </div>
+                    <div id="logSection" style="display: none;">
+                        <h4 style="color: #a1a1aa; margin: 0.5rem 0; font-size: 0.8rem;">Loglar</h4>
+                        <div class="log-output" id="logOutput"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects Tab -->
+        <div id="tab-projects" class="tab-content">
+            <div class="panel" style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 class="panel-title" style="margin-bottom: 0;">Tum Projeler</h3>
+                    <button class="btn-secondary btn-sm" onclick="loadProjectsList()">Yenile</button>
+                </div>
+            </div>
+            <div id="projectsList" class="projects-grid">
+                <div class="empty-state"><p>Yukleniyor...</p></div>
+            </div>
+        </div>
+
+        <!-- Gemini Pro Tab -->
+        <div id="tab-gemini-pro" class="tab-content">
+            <div class="main-content">
+                <div class="panel">
+                    <h3 class="panel-title">Gemini Pro - 3 Hesap Yonetimi</h3>
+                    <p style="color: #a1a1aa; font-size: 0.85rem; margin-bottom: 1rem;">
+                        3 Gemini Pro hesabi ile gunluk 9 video uret (her hesap 3 video limiti)
+                    </p>
+
+                    <!-- Hesap Durumu -->
+                    <div class="result-card">
+                        <h4>Hesap Durumu</h4>
+                        <div id="geminiProStatus">
+                            <p style="color: #a1a1aa;">Yukleniyor...</p>
+                        </div>
+                        <div class="button-group" style="margin-top: 0.5rem;">
+                            <button class="btn-secondary btn-sm" onclick="loadGeminiProStatus()">Yenile</button>
+                            <button class="btn-warning btn-sm" onclick="setupGeminiProAccounts()">Hesaplari Kur</button>
+                            <button class="btn-success btn-sm" onclick="verifyGeminiProAccounts()">Giris Kontrol</button>
+                            <button class="btn-danger btn-sm" onclick="closeGeminiProAccounts()">Kapat</button>
+                        </div>
+                    </div>
+
+                    <!-- Mod Secimi -->
+                    <div class="result-card">
+                        <h4>Mod Sec</h4>
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="geminiProMode" value="shorts" checked onchange="toggleGeminiProMode()">
+                                <span>Gunluk Shorts (9 video/gun)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="geminiProMode" value="long" onchange="toggleGeminiProMode()">
+                                <span>Uzun Video (63 prompt/7 gun)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Format Secimi -->
+                    <div class="result-card">
+                        <h4>Video Formati</h4>
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="geminiProFormat" value="9:16" checked>
+                                <span>9:16 Dikey (Shorts/Reels/TikTok)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="geminiProFormat" value="16:9">
+                                <span>16:9 Yatay (YouTube)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="geminiProFormat" value="1:1">
+                                <span>1:1 Kare (Instagram)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Prompt Girisi -->
+                    <div class="result-card">
+                        <h4>Promptlar</h4>
+                        <p style="color: #71717a; font-size: 0.75rem; margin-bottom: 0.5rem;">
+                            Her satir: gorsel_prompt | video_prompt (pipe ile ayir)
+                        </p>
+                        <textarea id="geminiProPrompts" style="height: 200px;" placeholder="ultra-realistic macro shot | cinematic slow zoom
+3D exploded diagram | smooth layer animation
+..."></textarea>
+                        <div id="geminiProPromptCount" style="color: #a1a1aa; font-size: 0.8rem; margin-top: 0.5rem;">
+                            0 prompt girildi (Max: 9 shorts / 63 uzun video)
+                        </div>
+                    </div>
+
+                    <!-- Ses Metni -->
+                    <div id="geminiProVoiceSection" class="result-card">
+                        <h4>Seslendirme Metni (Final Video icin)</h4>
+                        <textarea id="geminiProVoiceText" style="height: 100px;" placeholder="Final video icin seslendirme metni... (Script formatinda otomatik doldurulur)"></textarea>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" id="geminiProStartBtn" onclick="startGeminiProProject()">Baslat</button>
+                        <button class="btn-danger" id="geminiProStopBtn" onclick="stopGeminiProProject()" style="display:none">Durdur</button>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3 class="panel-title">Gemini Pro Projeler</h3>
+                    <div class="button-group" style="margin-bottom: 1rem;">
+                        <button class="btn-secondary btn-sm" onclick="loadGeminiProProjects()">Yenile</button>
+                    </div>
+                    <div id="geminiProProjects">
+                        <div class="empty-state"><p>Henuz proje yok</p></div>
+                    </div>
+
+                    <!-- Progress -->
+                    <div class="progress-section" id="geminiProProgress" style="display: none;">
+                        <div class="progress-bar-container"><div class="progress-bar" id="geminiProProgressBar"></div></div>
+                        <div class="progress-text">
+                            <span class="status-indicator">
+                                <span class="status-dot running" id="geminiProStatusDot"></span>
+                                <span id="geminiProStatusText">Bekliyor...</span>
+                            </span>
+                            <span id="geminiProProgressPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Claude Chat Tab -->
+        <div id="tab-claude" class="tab-content">
+            <div class="panel">
+                <h3 class="panel-title">Claude CLI Chat</h3>
+                <p style="color: #a1a1aa; font-size: 0.85rem; margin-bottom: 1rem;">
+                    Claude ile konusarak proje olustur, duzelt, yonet.
+                </p>
+                <div class="claude-input-area">
+                    <input type="text" id="claudeGlobalInput" class="claude-input" placeholder="Claude'a bir sey sor..." onkeypress="if(event.key==='Enter')sendToClaudeGlobal()">
+                    <button class="btn-purple" onclick="sendToClaudeGlobal()">Gonder</button>
+                </div>
+                <div id="claudeGlobalOutput" class="claude-output"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Detail Modal -->
+    <div class="modal-overlay" id="projectModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalProjectName">Proje Detaylari</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let pollingInterval = null;
+        const logs = [];
+        let currentProject = null;
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', ['new', 'projects', 'gemini-pro', 'claude'][i] === tab);
+            });
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            if (tab === 'projects') loadProjectsList();
+            if (tab === 'gemini-pro') {
+                loadGeminiProStatus();
+                loadGeminiProProjects();
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const time = new Date().toLocaleTimeString('tr-TR');
+            logs.push({ time, message, type });
+            const logOutput = document.getElementById('logOutput');
+            document.getElementById('logSection').style.display = 'block';
+            logOutput.innerHTML = logs.slice(-50).map(log =>
+                `<div class="log-entry"><span class="log-time">[${log.time}]</span> <span class="log-${log.type}">${log.message}</span></div>`
+            ).join('');
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function startGeneration() {
+            const script = document.getElementById('scriptInput').value;
+            if (!script.trim()) return alert('Script girin');
+            logs.length = 0;
+            addLog('Baslatiliyor...', 'info');
+            fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script })
+            }).then(r => r.json()).then(data => {
+                if (data.error) return addLog(data.error, 'error');
+                addLog('Islem basladi', 'success');
+                startPolling();
+            }).catch(e => addLog('Hata: ' + e.message, 'error'));
+        }
+
+        function runTest() {
+            logs.length = 0;
+            addLog('Test basliyor...', 'info');
+            fetch('/api/test', { method: 'POST' }).then(r => r.json()).then(data => {
+                if (data.error) return addLog(data.error, 'error');
+                addLog('Test basladi', 'success');
+                startPolling();
+            }).catch(e => addLog('Hata: ' + e.message, 'error'));
+        }
+
+        function switchGrokAccount() {
+            if (!confirm('Grok hesabini degistir?')) return;
+            fetch('/api/switch-grok-account', { method: 'POST' }).then(r => r.json()).then(d => {
+                addLog(d.success ? 'Grok temizlendi' : 'Hata: ' + d.error, d.success ? 'success' : 'error');
+            });
+        }
+
+        function switchGeminiAccount() {
+            if (!confirm('Gemini hesabini degistir?')) return;
+            fetch('/api/switch-gemini-account', { method: 'POST' }).then(r => r.json()).then(d => {
+                addLog(d.success ? 'Gemini temizlendi' : 'Hata: ' + d.error, d.success ? 'success' : 'error');
+            });
+        }
+
+        function startPolling() {
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('testBtn').disabled = true;
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(checkProgress, 1000);
+        }
+
+        function checkProgress() {
+            fetch('/api/progress').then(r => r.json()).then(data => {
+                document.getElementById('progressBar').style.width = data.progress + '%';
+                document.getElementById('progressPercent').textContent = data.progress + '%';
+                document.getElementById('statusText').textContent = data.message || 'Isleniyor...';
+                if (data.message && !logs.find(l => l.message === data.message)) addLog(data.message, 'info');
+                if (!data.running) {
+                    clearInterval(pollingInterval);
+                    document.getElementById('generateBtn').disabled = false;
+                    document.getElementById('testBtn').disabled = false;
+                    document.getElementById('statusDot').className = 'status-dot ' + (data.error ? 'error' : 'success');
+                    if (data.error) addLog('Hata: ' + data.error, 'error');
+                    else if (data.results) {
+                        addLog('Tamamlandi!', 'success');
+                        displayResults(data.results);
+                    }
+                }
+            });
+        }
+
+        function displayResults(r) {
+            const c = document.getElementById('resultsContainer');
+            let h = `<div class="result-card"><h4>${r.project_name}</h4><p>${r.success ? 'Basarili' : 'Hata: ' + r.error}</p></div>`;
+            if (r.images?.length) {
+                h += `<div class="result-card"><h4>Gorseller (${r.images.length})</h4><div class="image-preview">`;
+                r.images.forEach((img, i) => {
+                    if (img.cleaned_path) h += `<img src="/projects/${r.project_name}/${img.cleaned_path.split('/').pop()}" alt="Image ${i+1}">`;
+                });
+                h += '</div></div>';
+            }
+            if (r.final_video) {
+                const fn = r.final_video.split('/').pop();
+                h += `<div class="result-card" style="border:2px solid #22c55e"><h4 style="color:#22c55e">Final Video</h4>
+                    <video controls style="width:100%;max-height:300px;border-radius:8px"><source src="/projects/${r.project_name}/output/${fn}" type="video/mp4"></video></div>`;
+            }
+            h += `<div class="button-group"><button class="btn-secondary" onclick="openProjectDetails('${r.project_name}')">Detaylar</button></div>`;
+            c.innerHTML = h;
+        }
+
+        // Projects List
+        function loadProjectsList() {
+            const container = document.getElementById('projectsList');
+            container.innerHTML = '<div class="empty-state"><p>Yukleniyor...</p></div>';
+
+            fetch('/api/projects').then(r => r.json()).then(async projects => {
+                if (!projects.length) {
+                    container.innerHTML = '<div class="empty-state"><p>Proje yok</p></div>';
+                    return;
+                }
+
+                let html = '';
+                for (const p of projects) {
+                    // Get detailed check for each project
+                    let checkData = null;
+                    try {
+                        const res = await fetch(`/api/project/${p.name}/check`);
+                        checkData = await res.json();
+                    } catch(e) {}
+
+                    const imgCount = checkData?.existing_images?.length || p.images.filter(f => f.includes('_cleaned')).length;
+                    const vidCount = checkData?.existing_videos?.length || p.videos.filter(f => f.startsWith('video_') && !f.includes('final')).length;
+                    const expImg = checkData?.expected_images || imgCount;
+                    const expVid = checkData?.expected_videos || vidCount;
+                    const missingImg = checkData?.missing_images?.length || 0;
+                    const missingVid = checkData?.missing_videos?.length || 0;
+                    const hasFinal = p.videos.some(f => f.includes('final_video'));
+                    const isComplete = missingImg === 0 && missingVid === 0 && imgCount > 0;
+
+                    html += `
+                        <div class="project-card ${isComplete ? 'complete' : 'incomplete'}" onclick="openProjectDetails('${p.name}')">
+                            <div class="project-header">
+                                <span class="project-name">${p.name}</span>
+                                <span class="project-status ${isComplete ? 'complete' : 'incomplete'}">${isComplete ? 'Tamamlandi' : 'Eksik'}</span>
+                            </div>
+                            <div class="project-stats">
+                                <div class="stat-item ${missingImg > 0 ? 'missing' : ''}">
+                                    <div class="stat-value">${imgCount}/${expImg}</div>
+                                    <div class="stat-label">Gorsel</div>
+                                </div>
+                                <div class="stat-item ${missingVid > 0 ? 'missing' : ''}">
+                                    <div class="stat-value">${vidCount}/${expVid}</div>
+                                    <div class="stat-label">Video</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${hasFinal ? '1' : '0'}</div>
+                                    <div class="stat-label">Final</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${missingImg + missingVid}</div>
+                                    <div class="stat-label">Eksik</div>
+                                </div>
+                            </div>
+                            <div class="project-preview">
+                                ${p.images.filter(f => f.includes('_cleaned')).slice(0, 6).map(img =>
+                                    `<img src="/projects/${p.name}/${img}" alt="${img}">`
+                                ).join('')}
+                            </div>
+                            <div class="project-actions" onclick="event.stopPropagation()">
+                                <button class="btn-secondary" onclick="openProjectDetails('${p.name}')">Detaylar</button>
+                                <button class="btn-warning" onclick="completeProject('${p.name}')">Tamamla</button>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            });
+        }
+
+        // Project Details Modal
+        async function openProjectDetails(name) {
+            const modal = document.getElementById('projectModal');
+            const content = document.getElementById('modalContent');
+            document.getElementById('modalProjectName').textContent = name;
+            content.innerHTML = '<p>Yukleniyor...</p>';
+            modal.classList.add('active');
+
+            try {
+                const [detailsRes, checkRes] = await Promise.all([
+                    fetch(`/api/project/${name}/details`),
+                    fetch(`/api/project/${name}/check`)
+                ]);
+                const details = await detailsRes.json();
+                const check = await checkRes.json();
+
+                if (details.error) {
+                    content.innerHTML = `<p style="color:#ef4444">Hata: ${details.error}</p>`;
+                    return;
+                }
+
+                currentProject = { ...details, check };
+                renderProjectDetails();
+            } catch(e) {
+                content.innerHTML = `<p style="color:#ef4444">Hata: ${e.message}</p>`;
+            }
+        }
+
+        function renderProjectDetails() {
+            const d = currentProject;
+            const c = d.check || {};
+            const content = document.getElementById('modalContent');
+
+            let html = '';
+
+            // Stats
+            html += `<div class="project-stats" style="margin-bottom:1rem">
+                <div class="stat-item"><div class="stat-value">${Object.keys(d.existing_images||{}).length}/${d.expected_images}</div><div class="stat-label">Gorsel</div></div>
+                <div class="stat-item"><div class="stat-value">${Object.keys(d.existing_videos||{}).length}/${d.expected_videos}</div><div class="stat-label">Video</div></div>
+                <div class="stat-item"><div class="stat-value">${d.final_video ? '1' : '0'}</div><div class="stat-label">Final</div></div>
+                <div class="stat-item"><div class="stat-value">${(c.missing_images?.length||0) + (c.missing_videos?.length||0)}</div><div class="stat-label">Eksik</div></div>
+            </div>`;
+
+            // Empty prompts warning
+            const hasImagePrompts = Object.keys(d.image_prompts || {}).length > 0;
+            const hasVideoPrompts = Object.keys(d.video_prompts || {}).length > 0;
+            if (!hasImagePrompts && !hasVideoPrompts) {
+                html += `<div style="background:rgba(245,158,11,0.2);border:1px solid #f59e0b;border-radius:8px;padding:1rem;margin-bottom:1rem">
+                    <strong style="color:#f59e0b">Uyari:</strong> Bu proje eski - promptlar kaydedilmemis.
+                    Yeniden olusturmak icin promptlari manuel girin ve "Kaydet" butonuna basin.
+                </div>`;
+            }
+
+            // Action Bar
+            html += `<div class="action-bar">
+                <button class="btn-success" onclick="saveAllPrompts()">Kaydet</button>
+                <button class="btn-warning" onclick="regenerateSelected()">Secilenleri Olustur</button>
+                <button class="btn-primary" onclick="renderFinalVideo()">Render</button>
+                <button class="btn-purple" onclick="generateVoice()">Ses Olustur</button>
+                <button class="btn-danger" onclick="completeProject('${d.project_name}')">Eksikleri Tamamla</button>
+            </div>`;
+
+            // Images Section
+            html += `<div class="media-section">
+                <h3 class="media-section-title">Gorseller</h3>
+                <div class="media-grid">`;
+
+            for (let i = 1; i <= d.expected_images; i++) {
+                const exists = d.existing_images?.[String(i)];
+                const prompt = d.image_prompts?.[String(i)] || '';
+                html += `
+                    <div class="media-item ${exists ? 'has-content' : 'missing'}">
+                        <div class="media-item-header">
+                            <span class="media-item-title">Gorsel ${i}</span>
+                            <span class="media-item-status ${exists ? 'exists' : 'missing'}">${exists ? 'OK' : 'Eksik'}</span>
+                        </div>
+                        ${exists ? `<img src="${exists}" class="media-preview" alt="Gorsel ${i}">` : '<div class="media-preview" style="display:flex;align-items:center;justify-content:center;color:#71717a">Yok</div>'}
+                        <textarea class="media-prompt" id="img-prompt-${i}" placeholder="Prompt...">${prompt}</textarea>
+                        <div class="media-actions">
+                            <input type="checkbox" id="regen-img-${i}" ${!exists ? 'checked' : ''} style="width:20px">
+                            <button class="btn-sm btn-warning" onclick="regenerateSingle('image', ${i})">Olustur</button>
+                        </div>
+                    </div>`;
+            }
+            html += '</div></div>';
+
+            // Videos Section
+            html += `<div class="media-section">
+                <h3 class="media-section-title">Videolar</h3>
+                <div class="media-grid">`;
+
+            for (let i = 1; i <= d.expected_videos; i++) {
+                const exists = d.existing_videos?.[String(i)];
+                const prompt = d.video_prompts?.[String(i)] || '';
+                html += `
+                    <div class="media-item ${exists ? 'has-content' : 'missing'}">
+                        <div class="media-item-header">
+                            <span class="media-item-title">Video ${i}</span>
+                            <span class="media-item-status ${exists ? 'exists' : 'missing'}">${exists ? 'OK' : 'Eksik'}</span>
+                        </div>
+                        ${exists ? `<video src="${exists}" class="media-preview" controls></video>` : '<div class="media-preview" style="display:flex;align-items:center;justify-content:center;color:#71717a">Yok</div>'}
+                        <textarea class="media-prompt" id="vid-prompt-${i}" placeholder="Prompt...">${prompt}</textarea>
+                        <div class="media-actions">
+                            <input type="checkbox" id="regen-vid-${i}" ${!exists ? 'checked' : ''} style="width:20px">
+                            <button class="btn-sm btn-warning" onclick="regenerateSingle('video', ${i})">Olustur</button>
+                        </div>
+                    </div>`;
+            }
+            html += '</div></div>';
+
+            // Voice Section
+            html += `<div class="voice-section">
+                <h3>Seslendirme</h3>
+                <div class="voice-grid">
+                    <textarea id="voice-text" class="voice-text" placeholder="Seslendirme metni...">${d.voice?.text || ''}</textarea>
+                    <div>
+                        <input type="text" id="voice-style" class="voice-style" value="${d.voice?.style || 'friendly'}" placeholder="Stil">
+                        <button class="btn-purple btn-sm" style="width:100%;margin-top:0.5rem" onclick="generateVoice()">Ses Olustur</button>
+                    </div>
+                </div>
+            </div>`;
+
+            // Final Video
+            if (d.final_video) {
+                html += `<div class="final-section">
+                    <h3>Final Video</h3>
+                    <video controls><source src="${d.final_video}" type="video/mp4"></video>
+                    <div class="button-group" style="margin-top:0.5rem">
+                        <a href="${d.final_video}" download class="btn-success" style="text-align:center;text-decoration:none;display:block">Indir</a>
+                        <button class="btn-primary" onclick="renderFinalVideo()">Yeniden Render</button>
+                    </div>
+                </div>`;
+            }
+
+            // Claude Chat Section
+            html += `<div class="claude-section">
+                <h3>Claude ile Duzelt</h3>
+                <div class="claude-input-area">
+                    <input type="text" id="claudeInput" class="claude-input" placeholder="Ornek: 3. gorselin promptunu daha cinematic yap" onkeypress="if(event.key==='Enter')sendToClaude()">
+                    <button class="btn-purple" onclick="sendToClaude()">Gonder</button>
+                </div>
+                <div id="claudeOutput" class="claude-output"></div>
+            </div>`;
+
+            content.innerHTML = html;
+        }
+
+        function closeModal() {
+            document.getElementById('projectModal').classList.remove('active');
+            currentProject = null;
+        }
+
+        // Save prompts
+        async function saveAllPrompts() {
+            if (!currentProject) return;
+            const imagePrompts = {}, videoPrompts = {};
+            for (let i = 1; i <= currentProject.expected_images; i++) {
+                const el = document.getElementById(`img-prompt-${i}`);
+                if (el) imagePrompts[String(i)] = el.value;
+            }
+            for (let i = 1; i <= currentProject.expected_videos; i++) {
+                const el = document.getElementById(`vid-prompt-${i}`);
+                if (el) videoPrompts[String(i)] = el.value;
+            }
+            const voice = {
+                text: document.getElementById('voice-text')?.value || '',
+                style: document.getElementById('voice-style')?.value || 'friendly'
+            };
+
+            const res = await fetch(`/api/project/${currentProject.project_name}/update-prompts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_prompts: imagePrompts, video_prompts: videoPrompts, voice })
+            });
+            const data = await res.json();
+            alert(data.success ? 'Kaydedildi!' : 'Hata: ' + data.error);
+        }
+
+        // Regenerate selected
+        async function regenerateSelected() {
+            if (!currentProject) return;
+            await saveAllPrompts();
+
+            const images = [], videos = [];
+            for (let i = 1; i <= currentProject.expected_images; i++) {
+                if (document.getElementById(`regen-img-${i}`)?.checked) images.push(i);
+            }
+            for (let i = 1; i <= currentProject.expected_videos; i++) {
+                if (document.getElementById(`regen-vid-${i}`)?.checked) videos.push(i);
+            }
+
+            if (!images.length && !videos.length) {
+                alert('En az bir oge secin');
+                return;
+            }
+
+            const res = await fetch(`/api/project/${currentProject.project_name}/regenerate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ images, videos })
+            });
+            const data = await res.json();
+            if (data.error) return alert('Hata: ' + data.error);
+
+            closeModal();
+            switchTab('new');
+            addLog(`Yeniden olusturuluyor: ${images.length} gorsel, ${videos.length} video`, 'info');
+            startPolling();
+        }
+
+        // Regenerate single item
+        async function regenerateSingle(type, index) {
+            await saveAllPrompts();
+            const body = type === 'image' ? { images: [index], videos: [] } : { images: [], videos: [index] };
+
+            const res = await fetch(`/api/project/${currentProject.project_name}/regenerate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.error) return alert('Hata: ' + data.error);
+
+            closeModal();
+            switchTab('new');
+            addLog(`${type === 'image' ? 'Gorsel' : 'Video'} ${index} olusturuluyor`, 'info');
+            startPolling();
+        }
+
+        // Complete project (missing items)
+        async function completeProject(name) {
+            // Önce promptları kaydet (modal açıksa)
+            if (currentProject) {
+                await saveAllPrompts();
+            }
+
+            addLog(`${name} tamamlaniyor...`, 'info');
+
+            // Promptları topla
+            const imagePrompts = {};
+            const videoPrompts = {};
+
+            if (currentProject) {
+                for (let i = 1; i <= currentProject.expected_images; i++) {
+                    const el = document.getElementById(`img-prompt-${i}`);
+                    if (el && el.value) imagePrompts[String(i)] = el.value;
+                }
+                for (let i = 1; i <= currentProject.expected_videos; i++) {
+                    const el = document.getElementById(`vid-prompt-${i}`);
+                    if (el && el.value) videoPrompts[String(i)] = el.value;
+                }
+            }
+
+            const res = await fetch(`/api/project/${name}/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_prompts: imagePrompts,
+                    video_prompts: videoPrompts,
+                    voice_text: document.getElementById('voice-text')?.value || ''
+                })
+            });
+            const data = await res.json();
+            if (data.error) return addLog('Hata: ' + data.error, 'error');
+
+            closeModal();
+            switchTab('new');
+            startPolling();
+        }
+
+        // Render final video
+        async function renderFinalVideo() {
+            if (!currentProject) return;
+            await saveAllPrompts();
+
+            addLog('Final render basliyor...', 'info');
+            const res = await fetch(`/api/project/${currentProject.project_name}/render`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    voice_text: document.getElementById('voice-text')?.value || '',
+                    voice_style: document.getElementById('voice-style')?.value || 'friendly'
+                })
+            });
+            const data = await res.json();
+            if (data.error) return addLog('Hata: ' + data.error, 'error');
+
+            closeModal();
+            switchTab('new');
+            startPolling();
+        }
+
+        // Generate voice
+        async function generateVoice() {
+            if (!currentProject) return;
+            const text = document.getElementById('voice-text')?.value;
+            const style = document.getElementById('voice-style')?.value || 'friendly';
+
+            if (!text) return alert('Ses metni girin');
+
+            addLog('Ses olusturuluyor...', 'info');
+            const res = await fetch(`/api/project/${currentProject.project_name}/generate-voice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, style })
+            });
+            const data = await res.json();
+            if (data.error) addLog('Hata: ' + data.error, 'error');
+            else addLog('Ses olusturuldu!', 'success');
+        }
+
+        // Claude Chat
+        async function sendToClaude() {
+            const input = document.getElementById('claudeInput');
+            const output = document.getElementById('claudeOutput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            output.classList.add('active');
+            output.textContent = 'Claude dusunuyor...';
+
+            try {
+                const res = await fetch('/api/claude/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message,
+                        project: currentProject?.project_name
+                    })
+                });
+                const data = await res.json();
+                output.textContent = data.response || data.error || 'Yanit yok';
+                input.value = '';
+            } catch(e) {
+                output.textContent = 'Hata: ' + e.message;
+            }
+        }
+
+        async function sendToClaudeGlobal() {
+            const input = document.getElementById('claudeGlobalInput');
+            const output = document.getElementById('claudeGlobalOutput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            output.classList.add('active');
+            output.textContent = 'Claude dusunuyor...';
+
+            try {
+                const res = await fetch('/api/claude/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await res.json();
+                output.textContent = data.response || data.error || 'Yanit yok';
+                input.value = '';
+            } catch(e) {
+                output.textContent = 'Hata: ' + e.message;
+            }
+        }
+
+        // ==================== GEMINI PRO FUNCTIONS ====================
+
+        // Load Gemini Pro status
+        async function loadGeminiProStatus() {
+            try {
+                const res = await fetch('/api/gemini-pro/status');
+                const data = await res.json();
+
+                const container = document.getElementById('geminiProStatus');
+                if (data.error) {
+                    container.innerHTML = `<p style="color:#ef4444">${data.error}</p>`;
+                    return;
+                }
+
+                let html = `<p style="color:#22c55e">Tarih: ${data.date} | Toplam Kalan: ${data.total_remaining}/9</p>`;
+                html += '<div style="display:flex;gap:1rem;margin-top:0.5rem">';
+                for (const acc of data.accounts) {
+                    const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
+                    html += `<div style="background:rgba(0,0,0,0.2);padding:0.5rem 1rem;border-radius:8px;border-left:3px solid ${color}">
+                        <strong>Hesap ${acc.account_id}</strong><br>
+                        <span style="color:${color}">${acc.remaining}/3 kalan</span>
+                    </div>`;
+                }
+                html += '</div>';
+                container.innerHTML = html;
+            } catch(e) {
+                document.getElementById('geminiProStatus').innerHTML = `<p style="color:#ef4444">Hata: ${e.message}</p>`;
+            }
+        }
+
+        // Setup Gemini Pro accounts
+        async function setupGeminiProAccounts() {
+            if (!confirm('3 tarayici penceresi acilacak. Her birinde farkli bir Google hesabina giris yapin. Devam?')) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/setup', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Hata: ' + data.error);
+                    return;
+                }
+
+                alert('3 tarayici acildi. Her birinde Google hesabina giris yapin, sonra "Giris Kontrol" butonuna tiklayin.');
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Verify Gemini Pro accounts
+        async function verifyGeminiProAccounts() {
+            try {
+                const res = await fetch('/api/gemini-pro/verify', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Hata: ' + data.error);
+                    return;
+                }
+
+                let msg = 'Hesap Durumu:\n';
+                for (const acc of data.accounts) {
+                    msg += `Hesap ${acc.account_id}: ${acc.logged_in ? 'Giris yapildi' : 'Giris gerekli'}\n`;
+                }
+                msg += `\n${data.all_logged_in ? 'Tum hesaplar hazir!' : 'Eksik hesaplara giris yapin.'}`;
+                alert(msg);
+
+                if (data.all_logged_in) loadGeminiProStatus();
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Close Gemini Pro accounts
+        async function closeGeminiProAccounts() {
+            try {
+                await fetch('/api/gemini-pro/close', { method: 'POST' });
+                alert('Tum tarayicilar kapatildi.');
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Toggle mode (shorts vs long video)
+        function toggleGeminiProMode() {
+            updateGeminiProPromptCount();
+        }
+
+        // Update prompt count
+        function updateGeminiProPromptCount() {
+            const textarea = document.getElementById('geminiProPrompts');
+            const text = textarea.value;
+            const mode = document.querySelector('input[name="geminiProMode"]:checked').value;
+            const max = mode === 'shorts' ? 9 : 63;
+            const countEl = document.getElementById('geminiProPromptCount');
+
+            let count = 0;
+
+            // Check if script format
+            if (text.includes('---VIDEO START---') || text.includes('[IMAGE_1]')) {
+                // Count [IMAGE_X] entries
+                const imageMatches = text.match(/\[IMAGE_\d+\]/g);
+                count = imageMatches ? imageMatches.length : 0;
+                countEl.textContent = `${count} prompt bulundu (Script format) (Max: ${max})`;
+            } else {
+                // Simple format - count non-empty lines
+                const lines = text.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+                count = lines.length;
+                countEl.textContent = `${count} prompt girildi (Max: ${max})`;
+            }
+
+            countEl.style.color = count > max ? '#ef4444' : (count > 0 ? '#22c55e' : '#a1a1aa');
+        }
+
+        // Parse prompts from textarea - supports both simple and script format
+        function parseGeminiProPrompts() {
+            const text = document.getElementById('geminiProPrompts').value;
+
+            // Check if it's the script format (---VIDEO START---)
+            if (text.includes('---VIDEO START---') || text.includes('[IMAGE_1]')) {
+                return parseScriptFormat(text);
+            }
+
+            // Simple format: each line is "image_prompt | video_prompt"
+            const lines = text.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+
+            return lines.map(line => {
+                const parts = line.split('|').map(p => p.trim());
+                return {
+                    image_prompt: parts[0] || '',
+                    video_prompt: parts[1] || parts[0] || ''
+                };
+            });
+        }
+
+        // Parse the script format (---VIDEO START--- ... ---VIDEO END---)
+        // Returns: { prompts: [...], voiceText: "", thumbnailPrompt: "" }
+        function parseScriptFormat(text) {
+            const prompts = [];
+            const imagePrompts = {};
+            const videoPrompts = {};
+            let voiceText = '';
+            let voiceStyle = '';
+            let thumbnailPrompt = '';
+
+            // Extract image prompts
+            const imageRegex = /\[IMAGE_(\d+)\]\s*\n\s*prompt:\s*"([^"]+)"/g;
+            let match;
+            while ((match = imageRegex.exec(text)) !== null) {
+                const index = parseInt(match[1]);
+                imagePrompts[index] = match[2];
+            }
+
+            // Extract video prompts
+            const videoRegex = /\[VIDEO_(\d+)\]\s*\n\s*prompt:\s*"([^"]+)"/g;
+            while ((match = videoRegex.exec(text)) !== null) {
+                const index = parseInt(match[1]);
+                videoPrompts[index] = match[2];
+            }
+
+            // Extract thumbnail prompt
+            const thumbMatch = text.match(/\[THUMBNAIL\]\s*\n\s*prompt:\s*"([^"]+)"/);
+            if (thumbMatch) {
+                thumbnailPrompt = thumbMatch[1];
+            }
+
+            // Extract voice text (handles multi-line text)
+            const voiceMatch = text.match(/\[VOICE\]\s*\n\s*text:\s*"([\s\S]*?)"\s*\n\s*style:/);
+            if (voiceMatch) {
+                voiceText = voiceMatch[1].replace(/\s+/g, ' ').trim();
+            }
+
+            // Extract voice style
+            const styleMatch = text.match(/style:\s*"([^"]+)"/);
+            if (styleMatch) {
+                voiceStyle = styleMatch[1];
+            }
+
+            // Set voice text if found
+            if (voiceText) {
+                const voiceTextEl = document.getElementById('geminiProVoiceText');
+                if (voiceTextEl) voiceTextEl.value = voiceText;
+            }
+
+            // Combine image and video prompts
+            const maxIndex = Math.max(
+                ...Object.keys(imagePrompts).map(Number),
+                ...Object.keys(videoPrompts).map(Number),
+                0
+            );
+
+            for (let i = 1; i <= maxIndex; i++) {
+                if (imagePrompts[i] || videoPrompts[i]) {
+                    prompts.push({
+                        image_prompt: imagePrompts[i] || '',
+                        video_prompt: videoPrompts[i] || imagePrompts[i] || ''
+                    });
+                }
+            }
+
+            console.log(`Script format parsed: ${prompts.length} prompts, thumbnail: ${thumbnailPrompt ? 'yes' : 'no'}, voice: ${voiceText ? 'yes' : 'no'}`);
+
+            // Store parsed data globally for use in startGeminiProProject
+            window.lastParsedScript = {
+                prompts: prompts,
+                voiceText: voiceText,
+                voiceStyle: voiceStyle,
+                thumbnailPrompt: thumbnailPrompt
+            };
+
+            return prompts;
+        }
+
+        // Start Gemini Pro project
+        async function startGeminiProProject() {
+            const mode = document.querySelector('input[name="geminiProMode"]:checked').value;
+            const format = document.querySelector('input[name="geminiProFormat"]:checked').value;
+            const prompts = parseGeminiProPrompts();
+
+            if (prompts.length === 0) {
+                alert('Prompt girin!');
+                return;
+            }
+
+            const maxPrompts = mode === 'shorts' ? 9 : 63;
+            if (prompts.length > maxPrompts) {
+                alert(`Maksimum ${maxPrompts} prompt girebilirsiniz.`);
+                return;
+            }
+
+            const endpoint = mode === 'shorts' ? '/api/gemini-pro/daily-shorts' : '/api/gemini-pro/long-video';
+
+            try {
+                // Voice text'i al (script'ten parse edilen veya manuel girilen)
+                const voiceTextEl = document.getElementById('geminiProVoiceText');
+                let voiceText = voiceTextEl ? voiceTextEl.value : '';
+
+                // Script'ten parse edilen verileri kullan
+                let thumbnailPrompt = '';
+                if (window.lastParsedScript) {
+                    // Eğer voice text alanı boşsa, parse edilenden al
+                    if (!voiceText && window.lastParsedScript.voiceText) {
+                        voiceText = window.lastParsedScript.voiceText;
+                    }
+                    thumbnailPrompt = window.lastParsedScript.thumbnailPrompt || '';
+                }
+
+                const body = {
+                    prompts,
+                    voice_text: voiceText,
+                    format: format,
+                    thumbnail_prompt: thumbnailPrompt
+                };
+
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Hata: ' + data.error);
+                    return;
+                }
+
+                // Butonları güncelle
+                document.getElementById('geminiProStartBtn').style.display = 'none';
+                document.getElementById('geminiProStopBtn').style.display = 'inline-block';
+
+                if (mode === 'long') {
+                    alert(`Proje olusturuldu: ${data.project_name}\n${data.message}`);
+                    loadGeminiProProjects();
+                    document.getElementById('geminiProStartBtn').style.display = 'inline-block';
+                    document.getElementById('geminiProStopBtn').style.display = 'none';
+                } else {
+                    // Shorts mode - poll for progress
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+                document.getElementById('geminiProStartBtn').style.display = 'inline-block';
+                document.getElementById('geminiProStopBtn').style.display = 'none';
+            }
+        }
+
+        // Stop Gemini Pro project
+        async function stopGeminiProProject() {
+            if (!confirm('Olusturma islemini durdurmak istediginize emin misiniz?')) return;
+
+            try {
+                await fetch('/api/gemini-pro/stop', { method: 'POST' });
+
+                // Polling'i durdur
+                if (geminiProPollInterval) {
+                    clearInterval(geminiProPollInterval);
+                    geminiProPollInterval = null;
+                }
+
+                document.getElementById('geminiProStatusText').textContent = 'Durduruldu';
+                document.getElementById('geminiProStatusDot').classList.remove('running');
+                document.getElementById('geminiProStatusDot').classList.add('error');
+                document.getElementById('geminiProStartBtn').style.display = 'inline-block';
+                document.getElementById('geminiProStopBtn').style.display = 'none';
+            } catch(e) {
+                alert('Durdurma hatasi: ' + e.message);
+            }
+        }
+
+        // Poll for Gemini Pro progress
+        let geminiProPollInterval = null;
+        function startGeminiProPolling() {
+            if (geminiProPollInterval) clearInterval(geminiProPollInterval);
+
+            geminiProPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/progress');
+                    const data = await res.json();
+
+                    document.getElementById('geminiProProgressBar').style.width = data.progress + '%';
+                    document.getElementById('geminiProProgressPercent').textContent = data.progress + '%';
+                    document.getElementById('geminiProStatusText').textContent = data.message;
+
+                    if (!data.running) {
+                        clearInterval(geminiProPollInterval);
+                        geminiProPollInterval = null;
+                        document.getElementById('geminiProStatusDot').classList.remove('running');
+                        document.getElementById('geminiProStartBtn').style.display = 'inline-block';
+                        document.getElementById('geminiProStopBtn').style.display = 'none';
+
+                        if (data.error) {
+                            document.getElementById('geminiProStatusDot').classList.add('error');
+                            document.getElementById('geminiProStatusText').textContent = 'Hata: ' + data.error;
+                        } else {
+                            document.getElementById('geminiProStatusDot').classList.add('success');
+                            loadGeminiProProjects();
+                            loadGeminiProStatus();
+                        }
+                    }
+                } catch(e) {
+                    console.error('Polling error:', e);
+                }
+            }, 1500);
+        }
+
+        // Load Gemini Pro projects
+        async function loadGeminiProProjects() {
+            try {
+                const res = await fetch('/api/gemini-pro/projects');
+                const data = await res.json();
+
+                const container = document.getElementById('geminiProProjects');
+                if (!data.projects || data.projects.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>Henuz proje yok</p></div>';
+                    return;
+                }
+
+                let html = '';
+                for (const p of data.projects) {
+                    const typeLabel = p.type === 'long_video' ? 'Uzun Video' : 'Shorts';
+                    const typeColor = p.type === 'long_video' ? '#7c3aed' : '#00d4ff';
+                    html += `<div class="result-card" style="cursor:pointer" onclick="viewGeminiProProject('${p.name}')">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <h4 style="color:#00d4ff">${p.name}</h4>
+                            <span style="background:${typeColor};padding:0.2rem 0.5rem;border-radius:4px;font-size:0.75rem">${typeLabel}</span>
+                        </div>
+                        <p style="color:#a1a1aa;font-size:0.8rem;margin-top:0.5rem">
+                            ${p.total_prompts ? `${p.total_prompts} prompt` : ''}
+                            ${p.days ? `/ ${p.days} gun` : ''}
+                            ${p.status ? `- ${p.status}` : ''}
+                        </p>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+                            <button class="btn-sm btn-secondary" onclick="event.stopPropagation();viewGeminiProProject('${p.name}')">Goruntule</button>
+                            ${p.type === 'long_video' ? `<button class="btn-sm btn-primary" onclick="event.stopPropagation();runDailyBatch('${p.name}')">Bugunku Batch</button>` : ''}
+                        </div>
+                    </div>`;
+                }
+                container.innerHTML = html;
+            } catch(e) {
+                document.getElementById('geminiProProjects').innerHTML = `<p style="color:#ef4444">Hata: ${e.message}</p>`;
+            }
+        }
+
+        // View Gemini Pro project details
+        let currentGeminiProject = null;
+
+        async function viewGeminiProProject(projectName) {
+            try {
+                const res = await fetch(`/api/gemini-pro/projects/${projectName}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Hata: ' + data.error);
+                    return;
+                }
+
+                currentGeminiProject = data;
+                const pj = data.project_json;
+
+                let html = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                        <h3 style="color:#00d4ff">${data.name}</h3>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="btn-sm btn-secondary" onclick="closeModal()">Kapat</button>
+                        </div>
+                    </div>
+                `;
+
+                // Aksiyon butonları
+                html += `<div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">`;
+                if (pj) {
+                    const failedCount = Object.values(pj.status || {}).filter(s => s !== 'completed').length;
+                    if (failedCount > 0) {
+                        html += `<button class="btn-sm btn-primary" onclick="retryFailedGemini('${projectName}')">Eksikleri Tamamla (${failedCount})</button>`;
+                    }
+                }
+                html += `<button class="btn-sm btn-secondary" onclick="renderGeminiProject('${projectName}')">Yeniden Render</button>`;
+                html += `</div>`;
+
+                // Final video
+                if (data.final_video) {
+                    html += `
+                        <div class="result-card" style="background:#1a2e1a;border-color:#10b981">
+                            <h4 style="color:#10b981">Final Video</h4>
+                            <video controls style="width:100%;max-height:300px;margin-top:0.5rem">
+                                <source src="${data.final_video.url}" type="video/mp4">
+                            </video>
+                            <a href="${data.final_video.url}" download class="btn-sm btn-primary" style="margin-top:0.5rem;display:inline-block">Indir</a>
+                        </div>
+                    `;
+                }
+
+                // Thumbnail
+                const thumbnailImg = data.images.find(i => i.name.includes('thumbnail'));
+                if (thumbnailImg) {
+                    html += `
+                        <div class="result-card" style="background:#1a1a2e;border-color:#7c3aed">
+                            <h4 style="color:#7c3aed">Thumbnail</h4>
+                            <img src="${thumbnailImg.url}" style="width:100%;max-height:200px;object-fit:contain;margin-top:0.5rem;border-radius:8px;cursor:pointer" onclick="window.open('${thumbnailImg.url}','_blank')">
+                            <a href="${thumbnailImg.url}" download class="btn-sm btn-secondary" style="margin-top:0.5rem;display:inline-block">Indir</a>
+                        </div>
+                    `;
+                } else if (pj && pj.thumbnail_prompt && pj.thumbnail_status !== 'completed') {
+                    // Thumbnail henüz oluşturulmamış
+                    const thumbStatus = pj.thumbnail_status === 'failed' ? 'Hata' : 'Bekliyor';
+                    const thumbColor = pj.thumbnail_status === 'failed' ? '#ef4444' : '#f59e0b';
+                    html += `
+                        <div class="result-card" style="border-left:3px solid ${thumbColor}">
+                            <h4 style="color:${thumbColor}">Thumbnail (${thumbStatus})</h4>
+                            <p style="font-size:0.85rem;color:#666;margin-top:0.5rem">${pj.thumbnail_prompt.substring(0, 100)}...</p>
+                            <button class="btn-sm btn-primary" style="margin-top:0.5rem" onclick="retryGeminiThumbnail('${data.name}')">Thumbnail Olustur</button>
+                        </div>
+                    `;
+                }
+
+                // Promptlar ve Durumlar (project.json varsa)
+                if (pj && pj.image_prompts) {
+                    html += `<h4 style="margin:1rem 0 0.5rem;color:#a1a1aa">Promptlar ve Durumlar</h4>`;
+
+                    const statusColors = {
+                        'pending': '#f59e0b',
+                        'image_done': '#3b82f6',
+                        'video_failed': '#ef4444',
+                        'completed': '#10b981',
+                        'failed': '#ef4444'
+                    };
+
+                    const statusLabels = {
+                        'pending': 'Bekliyor',
+                        'image_done': 'Gorsel OK',
+                        'video_failed': 'Video Hatasi',
+                        'completed': 'Tamamlandi',
+                        'failed': 'Hata'
+                    };
+
+                    for (const idx of Object.keys(pj.image_prompts).sort((a,b) => parseInt(a) - parseInt(b))) {
+                        const status = pj.status?.[idx] || 'pending';
+                        const statusColor = statusColors[status] || '#a1a1aa';
+                        const statusLabel = statusLabels[status] || status;
+                        const imgPrompt = pj.image_prompts[idx] || '';
+                        const vidPrompt = pj.video_prompts?.[idx] || '';
+
+                        // İlgili görsel ve video
+                        const imgUrl = data.images.find(i => i.name.includes(`image_${idx}`))?.url;
+                        const vidUrl = data.videos.find(v => v.name === `video_${idx}.mp4`)?.url;
+
+                        html += `
+                            <div class="result-card" style="margin-bottom:0.5rem;border-left:3px solid ${statusColor}">
+                                <div style="display:flex;justify-content:space-between;align-items:center">
+                                    <span style="color:#00d4ff;font-weight:bold">#${idx}</span>
+                                    <span style="background:${statusColor};padding:2px 8px;border-radius:4px;font-size:0.75rem">${statusLabel}</span>
+                                </div>
+
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem">
+                                    ${imgUrl ? `<img src="${imgUrl}" style="width:100%;height:80px;object-fit:cover;border-radius:4px;cursor:pointer" onclick="window.open('${imgUrl}','_blank')">` : '<div style="background:#1e1e2e;height:80px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#666">Gorsel yok</div>'}
+                                    ${vidUrl ? `<video controls style="width:100%;height:80px;object-fit:cover;border-radius:4px"><source src="${vidUrl}" type="video/mp4"></video>` : '<div style="background:#1e1e2e;height:80px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#666">Video yok</div>'}
+                                </div>
+
+                                <details style="margin-top:0.5rem">
+                                    <summary style="cursor:pointer;color:#a1a1aa;font-size:0.85rem">Promptlari Duzenle</summary>
+                                    <div style="margin-top:0.5rem">
+                                        <label style="font-size:0.75rem;color:#666">Gorsel Prompt:</label>
+                                        <textarea id="imgPrompt_${idx}" style="width:100%;height:60px;background:#1e1e2e;border:1px solid #333;border-radius:4px;color:#fff;padding:0.5rem;font-size:0.8rem;margin-bottom:0.5rem">${imgPrompt}</textarea>
+                                        <label style="font-size:0.75rem;color:#666">Video Prompt:</label>
+                                        <textarea id="vidPrompt_${idx}" style="width:100%;height:60px;background:#1e1e2e;border:1px solid #333;border-radius:4px;color:#fff;padding:0.5rem;font-size:0.8rem">${vidPrompt}</textarea>
+                                        <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
+                                            <button class="btn-sm btn-secondary" onclick="updateGeminiPrompt('${projectName}',${idx})">Kaydet</button>
+                                            ${status !== 'completed' ? `<button class="btn-sm btn-primary" onclick="retryGeminiIndex('${projectName}',${idx})">Yeniden Olustur</button>` : ''}
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                        `;
+                    }
+
+                    // Ses metni
+                    if (pj.voice) {
+                        html += `
+                            <h4 style="margin:1rem 0 0.5rem;color:#a1a1aa">Ses Metni</h4>
+                            <div class="result-card">
+                                <textarea id="geminiVoiceText" style="width:100%;height:100px;background:#1e1e2e;border:1px solid #333;border-radius:4px;color:#fff;padding:0.5rem;font-size:0.85rem">${pj.voice.text || ''}</textarea>
+                                <button class="btn-sm btn-secondary" style="margin-top:0.5rem" onclick="updateGeminiVoice('${projectName}')">Ses Metnini Kaydet</button>
+                            </div>
+                        `;
+                    }
+                } else {
+                    // Eski format (project.json yok)
+                    // Images
+                    if (data.images.length > 0) {
+                        html += `<h4 style="margin:1rem 0 0.5rem;color:#a1a1aa">Gorseller (${data.images.length})</h4>`;
+                        html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">';
+                        for (const img of data.images) {
+                            html += `
+                                <div style="position:relative">
+                                    <img src="${img.url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="window.open('${img.url}','_blank')">
+                                    <span style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.7);padding:2px 6px;border-radius:4px;font-size:0.7rem">${img.name}</span>
+                                </div>
+                            `;
+                        }
+                        html += '</div>';
+                    }
+
+                    // Videos
+                    if (data.videos.length > 0) {
+                        html += `<h4 style="margin:1rem 0 0.5rem;color:#a1a1aa">Videolar (${data.videos.length})</h4>`;
+                        html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem">';
+                        for (const vid of data.videos) {
+                            html += `
+                                <div class="result-card" style="padding:0.5rem">
+                                    <video controls style="width:100%;max-height:150px">
+                                        <source src="${vid.url}" type="video/mp4">
+                                    </video>
+                                    <p style="font-size:0.75rem;color:#a1a1aa;margin-top:0.25rem">${vid.name}</p>
+                                </div>
+                            `;
+                        }
+                        html += '</div>';
+                    }
+                }
+
+                // Schedule info for long videos
+                if (data.schedule) {
+                    html += `
+                        <h4 style="margin:1rem 0 0.5rem;color:#a1a1aa">Program</h4>
+                        <div class="result-card">
+                            <p>Toplam: ${data.schedule.total_prompts} prompt / ${data.schedule.days} gun</p>
+                            <p>Durum: ${data.schedule.status}</p>
+                        </div>
+                    `;
+                }
+
+                const modal = document.getElementById('projectModal');
+                document.getElementById('modalContent').innerHTML = html;
+                modal.style.display = 'flex';
+
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Gemini prompt güncelle
+        async function updateGeminiPrompt(projectName, index) {
+            const imgPrompt = document.getElementById(`imgPrompt_${index}`).value;
+            const vidPrompt = document.getElementById(`vidPrompt_${index}`).value;
+
+            try {
+                const res = await fetch('/api/gemini-pro/update-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        index: index,
+                        image_prompt: imgPrompt,
+                        video_prompt: vidPrompt
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Prompt kaydedildi. Yeni durum: ' + data.new_status);
+                    viewGeminiProProject(projectName); // Yenile
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Gemini voice güncelle
+        async function updateGeminiVoice(projectName) {
+            const voiceText = document.getElementById('geminiVoiceText').value;
+
+            try {
+                const res = await fetch('/api/gemini-pro/update-voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        voice_text: voiceText
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Ses metni kaydedildi');
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Başarısız olanları yeniden dene
+        async function retryFailedGemini(projectName) {
+            if (!confirm('Eksik/basarisiz ogeleri yeniden olusturmak istiyor musunuz?')) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/retry-failed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeModal();
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Belirli bir indeksi yeniden dene
+        async function retryGeminiIndex(projectName, index) {
+            if (!confirm(`#${index} yeniden olusturulsun mu?`)) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/retry-failed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        indices: [index]
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeModal();
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Projeyi yeniden renderla
+        async function renderGeminiProject(projectName) {
+            if (!confirm('Projeyi yeniden renderlamak istiyor musunuz?')) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/render-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeModal();
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Thumbnail yeniden oluştur
+        async function retryGeminiThumbnail(projectName) {
+            if (!confirm('Thumbnail olusturmak istiyor musunuz?')) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/create-thumbnail', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeModal();
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Run daily batch for long video
+        async function runDailyBatch(projectName) {
+            try {
+                const res = await fetch('/api/gemini-pro/run-daily-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_dir: `gemini_pro_projects/${projectName}` })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Hata: ' + data.error);
+                    return;
+                }
+
+                document.getElementById('geminiProProgress').style.display = 'block';
+                startGeminiProPolling();
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Add event listener for prompt counting
+        document.getElementById('geminiProPrompts')?.addEventListener('input', updateGeminiProPromptCount);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+        document.getElementById('projectModal').addEventListener('click', e => {
+            if (e.target.id === 'projectModal') closeModal();
+        });
+
+        // Initial load
+        window.onload = () => {
+            fetch('/api/projects').then(r => r.json()).then(p => console.log('Projeler:', p.length));
+            // Load Gemini Pro status if on that tab
+            if (document.getElementById('tab-gemini-pro').classList.contains('active')) {
+                loadGeminiProStatus();
+                loadGeminiProProjects();
+            }
+        };
+    </script>
+</body>
+</html>
