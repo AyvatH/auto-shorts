@@ -1535,13 +1535,20 @@ def gemini_pro_render_project():
             try:
                 from video_renderer import render_project
 
-                # Video dosyalarını topla
+                # Video dosyalarını topla (temizlenmiş varsa onu kullan)
                 video_paths = []
                 expected_count = project_data.get("expected_count", 9)
                 for i in range(1, expected_count + 1):
-                    video_path = os.path.join(project_dir, f"video_{i}.mp4")
-                    if os.path.exists(video_path):
-                        video_paths.append(video_path)
+                    # Önce temizlenmiş videoyu dene
+                    cleaned_path = os.path.join(project_dir, f"video_{i}_cleaned.mp4")
+                    original_path = os.path.join(project_dir, f"video_{i}.mp4")
+
+                    if os.path.exists(cleaned_path):
+                        video_paths.append(cleaned_path)
+                        logger.info(f"Render: video_{i}_cleaned.mp4 kullanılıyor")
+                    elif os.path.exists(original_path):
+                        video_paths.append(original_path)
+                        logger.info(f"Render: video_{i}.mp4 kullanılıyor (temizlenmemiş)")
 
                 if not video_paths:
                     with task_lock:
