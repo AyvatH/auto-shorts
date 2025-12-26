@@ -744,7 +744,9 @@ style: "friendly"
         }
 
         function closeModal() {
-            document.getElementById('projectModal').classList.remove('active');
+            const modal = document.getElementById('projectModal');
+            modal.classList.remove('active');
+            modal.style.display = 'none';
             currentProject = null;
         }
 
