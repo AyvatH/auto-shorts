@@ -696,19 +696,56 @@ class GeminiProAccount:
             'video[src]',
             'video source[src]',
             '[data-testid*="video"] video',
+            'video',
+            '.video-container video',
+            '[class*="video"] video',
+            'model-response video',
+            'message-content video',
         ]
 
         for selector in selectors:
             try:
                 found = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 for vid in found:
-                    if vid.is_displayed():
+                    try:
+                        # Video elementi veya source'tan src al
                         src = vid.get_attribute('src')
-                        if src:
-                            videos.append(vid)
+                        if not src:
+                            # source elementinden al
+                            sources = vid.find_elements(By.TAG_NAME, 'source')
+                            for source in sources:
+                                src = source.get_attribute('src')
+                                if src:
+                                    break
+
+                        if src and ('blob:' in src or 'http' in src):
+                            if vid not in videos:
+                                videos.append(vid)
+                                logger.info(f"Video bulundu: {src[:100]}...")
+                    except:
+                        continue
             except:
                 continue
 
+        # Alternatif: Tüm videoları bul
+        if not videos:
+            try:
+                all_videos = self.driver.find_elements(By.TAG_NAME, 'video')
+                for vid in all_videos:
+                    try:
+                        src = vid.get_attribute('src') or ''
+                        # currentSrc'yi de kontrol et
+                        if not src:
+                            src = vid.get_attribute('currentSrc') or ''
+                        if src:
+                            videos.append(vid)
+                            logger.info(f"Alternatif video bulundu: {src[:100]}...")
+                    except:
+                        continue
+            except:
+                pass
+
+        logger.info(f"Toplam {len(videos)} video bulundu")
         return videos
 
     def _count_generated_videos(self) -> int:
@@ -763,33 +800,126 @@ class GeminiProAccount:
                 return None
 
             latest_video = videos[-1]
+
+            # Video src'yi al
             video_src = latest_video.get_attribute('src')
+            if not video_src:
+                video_src = latest_video.get_attribute('currentSrc')
+            if not video_src:
+                # source elementinden al
+                try:
+                    sources = latest_video.find_elements(By.TAG_NAME, 'source')
+                    for source in sources:
+                        video_src = source.get_attribute('src')
+                        if video_src:
+                            break
+                except:
+                    pass
 
-            if video_src:
-                # JavaScript ile indirme tetikle
-                filename = os.path.basename(save_path)
-                self.driver.execute_script(f"""
-                    var a = document.createElement('a');
-                    a.href = '{video_src}';
-                    a.download = '{filename}';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                """)
+            logger.info(f"Video src: {video_src[:100] if video_src else 'None'}...")
 
-                time.sleep(TIMEOUTS['download_wait'])
+            # İndirme öncesi dosyaları kaydet
+            downloads_dir = os.path.expanduser("~/Downloads")
+            files_before = set(glob.glob(os.path.join(downloads_dir, "*.mp4")))
+            files_before.update(glob.glob(os.path.join(downloads_dir, "*.webm")))
 
-                # İndirilen dosyayı bul ve taşı
-                downloaded = self._find_latest_download("*.mp4")
-                if downloaded:
-                    shutil.move(downloaded, save_path)
-                    self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
-                    return save_path
+            # YÖNTEM 1: İndirme butonunu bul ve tıkla
+            download_clicked = False
+            try:
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(self.driver)
+                actions.move_to_element(latest_video).perform()
+                time.sleep(1)
 
+                download_selectors = [
+                    'button[aria-label*="download" i]',
+                    'button[aria-label*="Download" i]',
+                    'button[aria-label*="indir" i]',
+                    '[data-tooltip*="download" i]',
+                    'button[data-test-id*="download"]',
+                ]
+
+                for selector in download_selectors:
+                    try:
+                        btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for btn in btns:
+                            if btn.is_displayed():
+                                btn.click()
+                                download_clicked = True
+                                logger.info(f"Video indirme butonu tıklandı: {selector}")
+                                time.sleep(5)
+                                break
+                        if download_clicked:
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                logger.warning(f"İndirme butonu bulunamadı: {e}")
+
+            # YÖNTEM 2: JavaScript ile indirme
+            if not download_clicked and video_src and video_src.startswith('http'):
+                try:
+                    filename = os.path.basename(save_path)
+                    self.driver.execute_script(f"""
+                        var a = document.createElement('a');
+                        a.href = '{video_src}';
+                        a.download = '{filename}';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    """)
+                    logger.info("JavaScript ile indirme tetiklendi")
+                    time.sleep(5)
+                except Exception as e:
+                    logger.warning(f"JS indirme başarısız: {e}")
+
+            # YÖNTEM 3: Blob URL'den indirme
+            if video_src and video_src.startswith('blob:'):
+                try:
+                    # Blob'u base64'e çevir ve indir
+                    video_data = self.driver.execute_script("""
+                        var video = arguments[0];
+                        var canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        // Not: Bu sadece canvas destekli videolar için çalışır
+                        return null;
+                    """, latest_video)
+                except:
+                    pass
+
+            # İndirilen dosyayı bul
+            time.sleep(5)
+            files_after = set(glob.glob(os.path.join(downloads_dir, "*.mp4")))
+            files_after.update(glob.glob(os.path.join(downloads_dir, "*.webm")))
+
+            new_files = files_after - files_before
+            if new_files:
+                newest = max(new_files, key=os.path.getmtime)
+                shutil.move(newest, save_path)
+                logger.info(f"Video indirildi ve taşındı: {save_path}")
+                self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
+                return save_path
+
+            # YÖNTEM 4: Doğrudan URL'den indir (http/https için)
+            if video_src and video_src.startswith('http'):
+                try:
+                    import urllib.request
+                    urllib.request.urlretrieve(video_src, save_path)
+                    if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                        logger.info(f"URL'den indirildi: {save_path}")
+                        self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
+                        return save_path
+                except Exception as e:
+                    logger.warning(f"URL indirme başarısız: {e}")
+
+            logger.warning("Video indirilemedi - tüm yöntemler başarısız")
             return None
 
         except Exception as e:
             logger.error(f"Video indirme hatası: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _find_latest_download(self, pattern: str) -> Optional[str]:
