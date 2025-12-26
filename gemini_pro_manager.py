@@ -1456,19 +1456,24 @@ class GeminiProManager:
                     last_timestamp = acc_data.get("last_used_timestamp")
                     usage = acc_data.get("usage", 0)
 
-                    if last_timestamp and usage > 0:
-                        # Son kullanımdan bu yana geçen süre
-                        last_used = datetime.fromisoformat(last_timestamp)
-                        hours_passed = (now - last_used).total_seconds() / 3600
+                    if usage > 0:
+                        if last_timestamp:
+                            # Son kullanımdan bu yana geçen süre
+                            last_used = datetime.fromisoformat(last_timestamp)
+                            hours_passed = (now - last_used).total_seconds() / 3600
 
-                        if hours_passed >= 24:
-                            # 24 saat geçti, sıfırla
-                            account.daily_usage = 0
-                            logger.info(f"Hesap {account.account_id}: 24 saat geçti, kullanım sıfırlandı")
+                            if hours_passed >= 24:
+                                # 24 saat geçti, sıfırla
+                                account.daily_usage = 0
+                                logger.info(f"Hesap {account.account_id}: 24 saat geçti, kullanım sıfırlandı")
+                            else:
+                                account.daily_usage = usage
+                                remaining_hours = 24 - hours_passed
+                                logger.info(f"Hesap {account.account_id}: {usage} kullanım, {remaining_hours:.1f} saat sonra sıfırlanacak")
                         else:
+                            # Timestamp yok ama usage var - kullanımı koru
                             account.daily_usage = usage
-                            remaining_hours = 24 - hours_passed
-                            logger.info(f"Hesap {account.account_id}: {usage} kullanım, {remaining_hours:.1f} saat sonra sıfırlanacak")
+                            logger.info(f"Hesap {account.account_id}: {usage} kullanım (timestamp yok)")
                     else:
                         account.daily_usage = 0
 

@@ -835,12 +835,16 @@ def gemini_pro_update_usage():
         old_usage = old_data.get("usage", 0)
 
         # Eğer kullanım artıyorsa yeni timestamp, azalıyorsa mevcut timestamp'i koru
+        old_timestamp = old_data.get("last_used_timestamp")
         if int(usage) > old_usage:
             new_timestamp = now.isoformat()
         elif int(usage) == 0:
             new_timestamp = None  # Sıfırlanınca timestamp'i kaldır
+        elif int(usage) > 0 and not old_timestamp:
+            # Kullanım var ama timestamp yok - yeni timestamp oluştur
+            new_timestamp = now.isoformat()
         else:
-            new_timestamp = old_data.get("last_used_timestamp")
+            new_timestamp = old_timestamp
 
         # Güncelle
         usage_data[account_key] = {
