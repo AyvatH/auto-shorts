@@ -91,3 +91,49 @@ FLASK_DEBUG = True
 # Logging
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 LOG_FILE = os.path.join(LOGS_DIR, "generator.log")
+
+# ===========================================
+# Gemini Pro Hesap Ayarları
+# ===========================================
+GEMINI_PRO_CONFIG_FILE = os.path.join(BASE_DIR, "gemini_pro_config.json")
+
+# Varsayılan değerler (config dosyası yoksa kullanılır)
+DEFAULT_GEMINI_PRO_CONFIG = {
+    "total_accounts": 4,           # Toplam hesap sayısı
+    "daily_limit_per_account": 3,  # Her hesabın günlük video limiti
+}
+
+def get_gemini_pro_config():
+    """Gemini Pro config'ini oku (dosya yoksa varsayılanı döndür)"""
+    import json
+    if os.path.exists(GEMINI_PRO_CONFIG_FILE):
+        try:
+            with open(GEMINI_PRO_CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                # Eksik alanları varsayılanla doldur
+                for key, value in DEFAULT_GEMINI_PRO_CONFIG.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+        except:
+            pass
+    return DEFAULT_GEMINI_PRO_CONFIG.copy()
+
+def save_gemini_pro_config(config):
+    """Gemini Pro config'ini kaydet"""
+    import json
+    with open(GEMINI_PRO_CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+    return True
+
+# Dinamik değerler (config'den okunur)
+def get_total_accounts():
+    return get_gemini_pro_config()["total_accounts"]
+
+def get_daily_limit():
+    return get_gemini_pro_config()["daily_limit_per_account"]
+
+def get_max_daily_videos():
+    """Günlük maksimum video sayısı (hesap sayısı x limit)"""
+    cfg = get_gemini_pro_config()
+    return cfg["total_accounts"] * cfg["daily_limit_per_account"]

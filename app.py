@@ -753,6 +753,58 @@ def gemini_pro_status():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/gemini-pro/config", methods=["GET"])
+def gemini_pro_get_config():
+    """Gemini Pro config'ini getir"""
+    try:
+        cfg = config.get_gemini_pro_config()
+        return jsonify({
+            "total_accounts": cfg["total_accounts"],
+            "daily_limit_per_account": cfg["daily_limit_per_account"],
+            "max_daily_videos": cfg["total_accounts"] * cfg["daily_limit_per_account"]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gemini-pro/config", methods=["POST"])
+def gemini_pro_save_config():
+    """Gemini Pro config'ini kaydet"""
+    try:
+        data = request.get_json()
+        total_accounts = data.get("total_accounts")
+        daily_limit = data.get("daily_limit_per_account")
+
+        if total_accounts is None or daily_limit is None:
+            return jsonify({"error": "total_accounts ve daily_limit_per_account gerekli"}), 400
+
+        if total_accounts < 1 or total_accounts > 10:
+            return jsonify({"error": "Hesap sayısı 1-10 arasında olmalı"}), 400
+
+        if daily_limit < 1 or daily_limit > 10:
+            return jsonify({"error": "Günlük limit 1-10 arasında olmalı"}), 400
+
+        new_config = {
+            "total_accounts": int(total_accounts),
+            "daily_limit_per_account": int(daily_limit)
+        }
+        config.save_gemini_pro_config(new_config)
+
+        # Manager'ı yeniden yükle
+        global gemini_pro_manager
+        gemini_pro_manager = None
+
+        logger.info(f"Gemini Pro config güncellendi: {new_config}")
+        return jsonify({
+            "success": True,
+            "message": f"Config güncellendi: {total_accounts} hesap, {daily_limit} video/gün",
+            "config": new_config
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/gemini-pro/update-usage", methods=["POST"])
 def gemini_pro_update_usage():
     """Manuel olarak hesap kullanımını güncelle"""
@@ -897,17 +949,19 @@ def gemini_pro_daily_shorts():
 
     # Hesap kontrolü
     if selected_account != "auto":
-        # Tek hesap seçildi, max 3 prompt
-        if len(prompts) > 3:
+        # Tek hesap seçildi, max = günlük limit
+        daily_limit = config.get_daily_limit()
+        if len(prompts) > daily_limit:
             with task_lock:
                 current_task["running"] = False
-            return jsonify({"error": f"Tek hesap için maksimum 3 video. {len(prompts)} prompt için 'Otomatik' seçin."}), 400
+            return jsonify({"error": f"Tek hesap için maksimum {daily_limit} video. {len(prompts)} prompt için 'Otomatik' seçin."}), 400
     else:
-        # Otomatik mod, max 9 prompt
-        if len(prompts) > 9:
+        # Otomatik mod, max = toplam günlük kapasite
+        max_daily = config.get_max_daily_videos()
+        if len(prompts) > max_daily:
             with task_lock:
                 current_task["running"] = False
-            return jsonify({"error": "Günde maksimum 9 video"}), 400
+            return jsonify({"error": f"Günde maksimum {max_daily} video"}), 400
 
     def run_shorts():
         global gemini_pro_manager, current_task
@@ -1024,8 +1078,9 @@ def gemini_pro_long_video():
     if not prompts:
         return jsonify({"error": "Prompt listesi gerekli"}), 400
 
-    if len(prompts) > 63:
-        return jsonify({"error": "Maksimum 63 prompt (7 gün x 9 video)"}), 400
+    max_weekly = config.get_max_daily_videos() * 7  # 7 günlük limit
+    if len(prompts) > max_weekly:
+        return jsonify({"error": f"Maksimum {max_weekly} prompt (7 gün x {config.get_max_daily_videos()} video)"}), 400
 
     try:
         from gemini_pro_manager import GeminiProManager, LongVideoMode

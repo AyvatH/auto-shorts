@@ -281,9 +281,9 @@ style: "friendly"
         <div id="tab-gemini-pro" class="tab-content">
             <div class="main-content">
                 <div class="panel">
-                    <h3 class="panel-title">Gemini Pro - 3 Hesap Yonetimi</h3>
-                    <p style="color: #a1a1aa; font-size: 0.85rem; margin-bottom: 1rem;">
-                        3 Gemini Pro hesabi ile gunluk 9 video uret (her hesap 3 video limiti)
+                    <h3 class="panel-title">Gemini Pro - Coklu Hesap Yonetimi</h3>
+                    <p id="geminiProConfigInfo" style="color: #a1a1aa; font-size: 0.85rem; margin-bottom: 1rem;">
+                        Yukleniyor...
                     </p>
 
                     <!-- Hesap Durumu -->
@@ -306,11 +306,11 @@ style: "friendly"
                         <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                 <input type="radio" name="geminiProMode" value="shorts" checked onchange="toggleGeminiProMode()">
-                                <span>Gunluk Shorts (9 video/gun)</span>
+                                <span id="shortsModeLabel">Gunluk Shorts</span>
                             </label>
                             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                 <input type="radio" name="geminiProMode" value="long" onchange="toggleGeminiProMode()">
-                                <span>Uzun Video (63 prompt/7 gun)</span>
+                                <span id="longModeLabel">Uzun Video (7 gun)</span>
                             </label>
                         </div>
                     </div>
@@ -360,46 +360,43 @@ style: "friendly"
                         <div id="accountStatusDisplay" style="margin-bottom: 1rem;">
                             <!-- Hesap durumları buraya yüklenecek -->
                         </div>
-                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="accountSelect" value="auto" checked>
-                                <span>Otomatik</span>
-                            </label>
-                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="accountSelect" value="1">
-                                <span>Hesap 1</span>
-                            </label>
-                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="accountSelect" value="2">
-                                <span>Hesap 2</span>
-                            </label>
-                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="accountSelect" value="3">
-                                <span>Hesap 3</span>
-                            </label>
-                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="accountSelect" value="4">
-                                <span>Hesap 4</span>
-                            </label>
+                        <div id="accountSelectContainer" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <!-- Dinamik olarak doldurulacak -->
                         </div>
                         <p id="accountSelectionHint" style="color: #71717a; font-size: 0.75rem; margin-top: 0.5rem;">
-                            3 veya daha az prompt icin tek hesap secebilirsiniz. Daha fazla icin otomatik dagitim kullanilir.
+                            Hesap secimi yukleniyor...
                         </p>
 
                         <!-- Manuel Hak Girişi -->
                         <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; border-radius: 8px;">
-                            <h4 style="color: #3b82f6; margin-bottom: 0.5rem; font-size: 0.9rem;">Manuel Kullanım Güncelle</h4>
+                            <h4 style="color: #3b82f6; margin-bottom: 0.5rem; font-size: 0.9rem;">Manuel Kullanim Guncelle</h4>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
                                 <select id="manualUsageAccount" style="padding: 0.4rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #3b82f6;">
-                                    <option value="1">Hesap 1</option>
-                                    <option value="2">Hesap 2</option>
-                                    <option value="3">Hesap 3</option>
-                                    <option value="4">Hesap 4</option>
+                                    <!-- Dinamik olarak doldurulacak -->
                                 </select>
-                                <input type="number" id="manualUsageValue" min="0" max="3" value="0" style="width: 60px; padding: 0.4rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #3b82f6;">
-                                <span style="color: #71717a; font-size: 0.8rem;">/ 3 hak</span>
+                                <input type="number" id="manualUsageValue" min="0" max="10" value="0" style="width: 60px; padding: 0.4rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #3b82f6;">
+                                <span id="manualUsageLimit" style="color: #71717a; font-size: 0.8rem;">/ ? hak</span>
                                 <button class="btn-sm btn-primary" onclick="updateManualUsage()" style="padding: 0.4rem 0.8rem;">Kaydet</button>
                             </div>
+                        </div>
+
+                        <!-- Config Ayarları -->
+                        <div style="margin-top: 1rem; padding: 1rem; background: rgba(124, 58, 237, 0.1); border: 1px solid #7c3aed; border-radius: 8px;">
+                            <h4 style="color: #7c3aed; margin-bottom: 0.5rem; font-size: 0.9rem;">⚙️ Hesap Ayarlari</h4>
+                            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                    <label style="color: #a1a1aa; font-size: 0.85rem;">Hesap Sayisi:</label>
+                                    <input type="number" id="configTotalAccounts" min="1" max="10" value="4" style="width: 50px; padding: 0.3rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #7c3aed;">
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                    <label style="color: #a1a1aa; font-size: 0.85rem;">Gunluk Limit:</label>
+                                    <input type="number" id="configDailyLimit" min="1" max="10" value="3" style="width: 50px; padding: 0.3rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #7c3aed;">
+                                </div>
+                                <button class="btn-sm" onclick="saveGeminiProConfig()" style="padding: 0.4rem 0.8rem; background: #7c3aed; border-color: #7c3aed;">Kaydet</button>
+                            </div>
+                            <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.5rem;">
+                                Degisiklikler kaydedildiginde sayfa yenilenecek
+                            </p>
                         </div>
                     </div>
 
@@ -473,6 +470,7 @@ style: "friendly"
             document.getElementById('tab-' + tab).classList.add('active');
             if (tab === 'projects') loadProjectsList();
             if (tab === 'gemini-pro') {
+                loadGeminiProConfig();
                 loadGeminiProStatus();
                 loadGeminiProProjects();
             }
@@ -1050,6 +1048,97 @@ style: "friendly"
 
         // Global account data
         let geminiProAccountData = null;
+        let geminiProConfig = { total_accounts: 4, daily_limit_per_account: 3, max_daily_videos: 12 };
+
+        // Load Gemini Pro config
+        async function loadGeminiProConfig() {
+            try {
+                const res = await fetch('/api/gemini-pro/config');
+                const data = await res.json();
+                if (!data.error) {
+                    geminiProConfig = data;
+
+                    // Config info güncelle
+                    document.getElementById('geminiProConfigInfo').textContent =
+                        `${data.total_accounts} Gemini Pro hesabi ile gunluk ${data.max_daily_videos} video uret (her hesap ${data.daily_limit_per_account} video limiti)`;
+
+                    // Config input'larını güncelle
+                    document.getElementById('configTotalAccounts').value = data.total_accounts;
+                    document.getElementById('configDailyLimit').value = data.daily_limit_per_account;
+
+                    // Manuel usage limit güncelle
+                    document.getElementById('manualUsageLimit').textContent = `/ ${data.daily_limit_per_account} hak`;
+                    document.getElementById('manualUsageValue').max = data.daily_limit_per_account;
+
+                    // Mod label'larını güncelle
+                    document.getElementById('shortsModeLabel').textContent = `Gunluk Shorts (${data.max_daily_videos} video/gun)`;
+                    document.getElementById('longModeLabel').textContent = `Uzun Video (${data.max_daily_videos * 7} prompt/7 gun)`;
+
+                    // Hesap seçim radio butonlarını oluştur
+                    buildAccountSelectRadios(data.total_accounts);
+
+                    // Manuel usage dropdown'ı oluştur
+                    buildManualUsageDropdown(data.total_accounts);
+                }
+            } catch(e) {
+                console.error('Config yükleme hatası:', e);
+            }
+        }
+
+        // Hesap seçim radio butonlarını oluştur
+        function buildAccountSelectRadios(totalAccounts) {
+            const container = document.getElementById('accountSelectContainer');
+            let html = `
+                <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="radio" name="accountSelect" value="auto" checked>
+                    <span>Otomatik</span>
+                </label>`;
+
+            for (let i = 1; i <= totalAccounts; i++) {
+                html += `
+                    <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="radio" name="accountSelect" value="${i}">
+                        <span>Hesap ${i}</span>
+                    </label>`;
+            }
+            container.innerHTML = html;
+        }
+
+        // Manuel usage dropdown'ı oluştur
+        function buildManualUsageDropdown(totalAccounts) {
+            const select = document.getElementById('manualUsageAccount');
+            let html = '';
+            for (let i = 1; i <= totalAccounts; i++) {
+                html += `<option value="${i}">Hesap ${i}</option>`;
+            }
+            select.innerHTML = html;
+        }
+
+        // Save Gemini Pro config
+        async function saveGeminiProConfig() {
+            const totalAccounts = parseInt(document.getElementById('configTotalAccounts').value);
+            const dailyLimit = parseInt(document.getElementById('configDailyLimit').value);
+
+            if (!confirm(`Ayarlar: ${totalAccounts} hesap, ${dailyLimit} video/gün olarak güncellenecek. Devam?`)) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ total_accounts: totalAccounts, daily_limit_per_account: dailyLimit })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert(data.message);
+                    location.reload(); // Sayfayı yenile
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
 
         // Load Gemini Pro status
         async function loadGeminiProStatus() {
@@ -1064,13 +1153,16 @@ style: "friendly"
                     return;
                 }
 
-                let html = `<p style="color:#22c55e">Tarih: ${data.date} | Toplam Kalan: ${data.total_remaining}/9</p>`;
-                html += '<div style="display:flex;gap:1rem;margin-top:0.5rem">';
+                const maxDaily = geminiProConfig.max_daily_videos || (data.accounts.length * 3);
+                const dailyLimit = geminiProConfig.daily_limit_per_account || 3;
+
+                let html = `<p style="color:#22c55e">Tarih: ${data.date} | Toplam Kalan: ${data.total_remaining}/${maxDaily}</p>`;
+                html += '<div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">';
                 for (const acc of data.accounts) {
                     const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
                     html += `<div style="background:rgba(0,0,0,0.2);padding:0.5rem 1rem;border-radius:8px;border-left:3px solid ${color}">
                         <strong>Hesap ${acc.account_id}</strong><br>
-                        <span style="color:${color}">${acc.remaining}/3 kalan</span>
+                        <span style="color:${color}">${acc.remaining}/${dailyLimit} kalan</span>
                     </div>`;
                 }
                 html += '</div>';
@@ -1078,6 +1170,10 @@ style: "friendly"
 
                 // Hesap seçimi bölümünü de güncelle
                 updateAccountStatusDisplay(data);
+
+                // Hint güncelle
+                document.getElementById('accountSelectionHint').textContent =
+                    `${dailyLimit} veya daha az prompt icin tek hesap secebilirsiniz. Daha fazla icin otomatik dagitim kullanilir.`;
             } catch(e) {
                 document.getElementById('geminiProStatus').innerHTML = `<p style="color:#ef4444">Hata: ${e.message}</p>`;
             }
@@ -1088,13 +1184,15 @@ style: "friendly"
             const display = document.getElementById('accountStatusDisplay');
             if (!display || !data.accounts) return;
 
+            const dailyLimit = geminiProConfig.daily_limit_per_account || 3;
+
             let html = '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">';
             for (const acc of data.accounts) {
                 const color = acc.remaining > 0 ? '#22c55e' : '#ef4444';
                 const bgColor = acc.remaining > 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
                 html += `<div style="background:${bgColor};padding:0.4rem 0.8rem;border-radius:6px;border:1px solid ${color};font-size:0.85rem;">
                     <strong style="color:${color}">Hesap ${acc.account_id}:</strong>
-                    <span style="color:#a1a1aa">${acc.used}/3 kullanildi</span>
+                    <span style="color:#a1a1aa">${acc.used}/${dailyLimit} kullanildi</span>
                 </div>`;
             }
             html += '</div>';

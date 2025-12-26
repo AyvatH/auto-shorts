@@ -1,8 +1,7 @@
 """
 Gemini Pro Manager - Multi-Account Image & Video Generator
-3 Gemini Pro hesabı ile görsel ve video oluşturma
-Her hesap günde 3 video limiti
-Mevcut generator.py gibi adım adım çalışır
+Gemini Pro hesapları ile görsel ve video oluşturma
+Hesap sayısı ve limitler config'den dinamik okunur
 """
 import os
 import json
@@ -24,9 +23,16 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# Hesap limitleri
-DAILY_VIDEO_LIMIT = 3
-TOTAL_ACCOUNTS = 4
+# Hesap limitleri - config'den dinamik okunur
+def get_daily_video_limit():
+    return config.get_daily_limit()
+
+def get_total_accounts():
+    return config.get_total_accounts()
+
+# Geriye uyumluluk için (eski kodlarda kullanılıyor)
+DAILY_VIDEO_LIMIT = config.get_daily_limit()
+TOTAL_ACCOUNTS = config.get_total_accounts()
 
 # Gemini Pro URL
 GEMINI_URL = "https://gemini.google.com"
