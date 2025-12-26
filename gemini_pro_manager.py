@@ -825,34 +825,62 @@ class GeminiProAccount:
                             return save_path
                         logger.info(f"Yeni dosya bulundu ama çok küçük: {os.path.getsize(newest)} bytes, bekleniyor...")
 
-            # ===== YÖNTEM 4: HTTP(S) URL'den doğrudan indir =====
+            # ===== YÖNTEM 4: JavaScript fetch ile görsel al =====
             if img_src.startswith('http'):
                 try:
-                    logger.info("Yöntem 4: HTTP URL'den indiriliyor...")
-                    import urllib.request
+                    logger.info("Yöntem 4: JavaScript fetch ile indiriliyor...")
+                    # Tarayıcı içinde fetch yap ve base64 olarak al
+                    fetch_result = self.driver.execute_async_script("""
+                    var callback = arguments[arguments.length - 1];
+                    var imgUrl = arguments[0];
 
-                    # Gemini URL'leri için cookies/headers gerekebilir
-                    # Selenium'dan cookies al
-                    cookies = self.driver.get_cookies()
-                    cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+                    fetch(imgUrl, {
+                        credentials: 'include',
+                        headers: {
+                            'Accept': 'image/*'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        var reader = new FileReader();
+                        reader.onloadend = function() {
+                            callback({
+                                success: true,
+                                data: reader.result,
+                                size: blob.size,
+                                type: blob.type
+                            });
+                        };
+                        reader.readAsDataURL(blob);
+                    })
+                    .catch(err => {
+                        callback({success: false, error: err.toString()});
+                    });
+                    """, img_src)
 
-                    req = urllib.request.Request(img_src)
-                    req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
-                    req.add_header('Referer', 'https://gemini.google.com/')
-                    req.add_header('Cookie', cookie_str)
+                    if fetch_result and fetch_result.get('success') and fetch_result.get('data'):
+                        data_url = fetch_result['data']
+                        if data_url.startswith('data:image'):
+                            import base64
+                            base64_data = data_url.split(',')[1]
+                            image_data = base64.b64decode(base64_data)
 
-                    with urllib.request.urlopen(req, timeout=30) as response:
-                        with open(save_path, 'wb') as f:
-                            f.write(response.read())
+                            with open(save_path, 'wb') as f:
+                                f.write(image_data)
 
-                    if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
-                        logger.info(f"✅ URL'den indirildi: {save_path}")
-                        self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
-                        return save_path
+                            if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                                logger.info(f"✅ JS fetch ile indirildi: {save_path} ({fetch_result.get('size', 0)} bytes)")
+                                self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                                return save_path
+                            else:
+                                logger.warning(f"JS fetch dosya çok küçük: {os.path.getsize(save_path) if os.path.exists(save_path) else 0}")
                     else:
-                        logger.warning(f"URL indirme dosya çok küçük: {os.path.getsize(save_path) if os.path.exists(save_path) else 0}")
+                        logger.warning(f"JS fetch başarısız: {fetch_result.get('error', 'Bilinmeyen hata')}")
                 except Exception as e:
-                    logger.warning(f"URL indirme başarısız: {e}")
+                    logger.warning(f"JS fetch yöntemi başarısız: {e}")
 
             # ===== YÖNTEM 5: Fetch API ile blob URL'yi çöz =====
             if img_src.startswith('blob:'):
