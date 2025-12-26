@@ -810,9 +810,17 @@ class GeminiProAccount:
             # ===== YÖNTEM 3: Downloads klasöründe yeni dosya bekle (buton tıklandıysa) =====
             if download_clicked:
                 logger.info("Yöntem 3: Downloads klasörü kontrol ediliyor...")
-                # Birkaç saniye bekle ve kontrol et
-                for wait_sec in range(8):
-                    time.sleep(1)
+                max_wait = 30  # 30 saniye bekle
+
+                for attempt in range(max_wait // 2):
+                    # .crdownload dosyalarını kontrol et (indirme devam ediyor)
+                    crdownloads = glob.glob(os.path.join(downloads_dir, "*.crdownload"))
+                    if crdownloads:
+                        logger.info(f"İndirme devam ediyor ({len(crdownloads)} .crdownload dosyası)...")
+                        time.sleep(2)
+                        continue
+
+                    # Yeni dosya kontrolü
                     files_after = set()
                     for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
                         files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
@@ -826,6 +834,25 @@ class GeminiProAccount:
                             self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
                             return save_path
                         logger.info(f"Yeni dosya bulundu ama çok küçük: {os.path.getsize(newest)} bytes, bekleniyor...")
+
+                    # Dosya yaşına göre kontrol (fallback)
+                    all_files = []
+                    for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                        all_files.extend(glob.glob(os.path.join(downloads_dir, ext)))
+
+                    if all_files:
+                        latest = max(all_files, key=os.path.getctime)
+                        file_age = time.time() - os.path.getctime(latest)
+                        if file_age < 30:  # Son 30 saniyede indirilen
+                            if os.path.getsize(latest) > 10000:
+                                shutil.move(latest, save_path)
+                                logger.info(f"✅ Yaşa göre bulundu ve taşındı: {save_path} ({file_age:.1f}s önce)")
+                                self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                                return save_path
+
+                    if attempt % 3 == 0:
+                        logger.info(f"Dosya bekleniyor... ({attempt + 1}/{max_wait // 2})")
+                    time.sleep(2)
 
             # ===== YÖNTEM 4: JavaScript fetch ile görsel al =====
             if img_src.startswith('http'):
@@ -916,23 +943,28 @@ class GeminiProAccount:
                 except Exception as e:
                     logger.warning(f"Fetch API yöntemi başarısız: {e}")
 
-            # ===== YÖNTEM 6: Son kontrol - Downloads klasöründe bekle =====
+            # ===== YÖNTEM 6: Son kontrol - Dosya yaşına göre bul =====
             if not os.path.exists(save_path):
-                logger.info("Yöntem 6: Son Downloads kontrolü...")
-                for _ in range(5):
-                    time.sleep(1)
-                    files_after = set()
-                    for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
-                        files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
+                logger.info("Yöntem 6: Son kontrol - dosya yaşına göre aranıyor...")
 
-                    new_files = files_after - files_before
-                    if new_files:
-                        newest = max(new_files, key=os.path.getmtime)
-                        if os.path.getsize(newest) > 10000:
-                            shutil.move(newest, save_path)
-                            logger.info(f"✅ Downloads'dan taşındı: {save_path}")
-                            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
-                            return save_path
+                # Tüm görsel dosyalarını listele
+                all_files = []
+                for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                    all_files.extend(glob.glob(os.path.join(downloads_dir, ext)))
+
+                if all_files:
+                    # En son oluşturulan dosyayı bul
+                    latest = max(all_files, key=os.path.getctime)
+                    file_age = time.time() - os.path.getctime(latest)
+
+                    logger.info(f"En yeni dosya: {os.path.basename(latest)} ({file_age:.1f}s önce)")
+
+                    # Son 60 saniyede indirildiyse kullan
+                    if file_age < 60 and os.path.getsize(latest) > 10000:
+                        shutil.move(latest, save_path)
+                        logger.info(f"✅ Yaşa göre bulundu ve taşındı: {save_path}")
+                        self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                        return save_path
 
             # Dosya başarıyla oluşturulduysa dön
             if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
