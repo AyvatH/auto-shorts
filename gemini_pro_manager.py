@@ -1357,22 +1357,28 @@ class DailyShortsMode:
                     shutil.copy(downloaded_image, cleaned_image_path)
                     video_result["cleaned_image_path"] = cleaned_image_path
 
-                # ===== 3. AYNI SOHBETTE VIDEO OLUŞTUR =====
-                # Yeni sohbet başlatmıyoruz - Gemini oluşturduğu görseli zaten biliyor
-                self.manager._update_progress(f"[{i}] Video oluşturuluyor ({self.aspect_format})...", 35 + (i * 8))
-                time.sleep(2)
+                # ===== 3. YENİ SOHBET + TEMİZ GÖRSELİ UPLOAD + VIDEO OLUŞTUR =====
+                self.manager._update_progress(f"[{i}] Yeni sohbet başlatılıyor...", 30 + (i * 8))
+
+                # Yeni sohbet başlat
+                account.new_chat()
+                time.sleep(3)
+
+                self.manager._update_progress(f"[{i}] Temiz görsel yükleniyor...", 33 + (i * 8))
 
                 video_prompt = prompt_data.get("video_prompt", "")
-                # Aynı sohbette oluşturulan görselden video iste - format çok önemli!
-                full_video_prompt = f"Now create a short cinematic video animation from this image you just generated. {self.video_format_desc}. {video_prompt}"
+                # Video prompt'u hazırla
+                full_video_prompt = f"Create a short cinematic video animation from this image. {self.video_format_desc}. {video_prompt}"
 
                 prev_video_count = account._count_generated_videos()
 
-                # Prompt gönder (upload gerek yok - görsel zaten sohbette)
-                if not account.send_prompt(full_video_prompt):
-                    video_result["error"] = "Video prompt gönderilemedi"
+                # Temizlenmiş görseli upload et ve video prompt'u gönder
+                if not account.upload_and_prompt(cleaned_image_path, full_video_prompt):
+                    video_result["error"] = "Görsel yüklenemedi veya video prompt gönderilemedi"
                     results["videos"].append(video_result)
                     continue
+
+                self.manager._update_progress(f"[{i}] Video oluşturuluyor ({self.aspect_format})...", 35 + (i * 8))
 
                 # Video oluşturulmasını bekle
                 if not account.wait_for_video_generation(prev_video_count):
