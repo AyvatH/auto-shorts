@@ -753,6 +753,46 @@ def gemini_pro_status():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/gemini-pro/update-usage", methods=["POST"])
+def gemini_pro_update_usage():
+    """Manuel olarak hesap kullanımını güncelle"""
+    try:
+        data = request.get_json()
+        account_id = data.get("account_id")
+        usage = data.get("usage")
+
+        if account_id is None or usage is None:
+            return jsonify({"error": "account_id ve usage gerekli"}), 400
+
+        # Usage dosyasını oku
+        usage_file = os.path.join(config.BASE_DIR, "gemini_pro_usage.json")
+        if os.path.exists(usage_file):
+            with open(usage_file, "r") as f:
+                usage_data = json.load(f)
+        else:
+            usage_data = {}
+
+        # Hesap anahtarı
+        account_key = f"account_{account_id}"
+
+        # Güncelle
+        today = datetime.now().strftime("%Y-%m-%d")
+        usage_data[account_key] = {
+            "usage": int(usage),
+            "last_date": today
+        }
+
+        # Kaydet
+        with open(usage_file, "w") as f:
+            json.dump(usage_data, f, indent=2)
+
+        logger.info(f"Hesap {account_id} kullanımı güncellendi: {usage}")
+        return jsonify({"success": True, "message": f"Hesap {account_id} kullanımı {usage} olarak güncellendi"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/gemini-pro/setup", methods=["POST"])
 def gemini_pro_setup():
     """Gemini Pro hesaplarını kurulum için aç"""

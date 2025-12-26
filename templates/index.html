@@ -363,7 +363,7 @@ style: "friendly"
                         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                             <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                 <input type="radio" name="accountSelect" value="auto" checked>
-                                <span>Otomatik (Prompt sayisina gore)</span>
+                                <span>Otomatik</span>
                             </label>
                             <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                 <input type="radio" name="accountSelect" value="1">
@@ -377,10 +377,30 @@ style: "friendly"
                                 <input type="radio" name="accountSelect" value="3">
                                 <span>Hesap 3</span>
                             </label>
+                            <label class="account-radio" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="accountSelect" value="4">
+                                <span>Hesap 4</span>
+                            </label>
                         </div>
                         <p id="accountSelectionHint" style="color: #71717a; font-size: 0.75rem; margin-top: 0.5rem;">
                             3 veya daha az prompt icin tek hesap secebilirsiniz. Daha fazla icin otomatik dagitim kullanilir.
                         </p>
+
+                        <!-- Manuel Hak Girişi -->
+                        <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; border-radius: 8px;">
+                            <h4 style="color: #3b82f6; margin-bottom: 0.5rem; font-size: 0.9rem;">Manuel Kullanım Güncelle</h4>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                                <select id="manualUsageAccount" style="padding: 0.4rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #3b82f6;">
+                                    <option value="1">Hesap 1</option>
+                                    <option value="2">Hesap 2</option>
+                                    <option value="3">Hesap 3</option>
+                                    <option value="4">Hesap 4</option>
+                                </select>
+                                <input type="number" id="manualUsageValue" min="0" max="3" value="0" style="width: 60px; padding: 0.4rem; border-radius: 4px; background: #27272a; color: #fafafa; border: 1px solid #3b82f6;">
+                                <span style="color: #71717a; font-size: 0.8rem;">/ 3 hak</span>
+                                <button class="btn-sm btn-primary" onclick="updateManualUsage()" style="padding: 0.4rem 0.8rem;">Kaydet</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="button-group">
@@ -689,13 +709,8 @@ style: "friendly"
             // Eksikleri Tamamla - Ayrı Bölüm
             html += `<div style="margin-top:1rem;padding:1rem;background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:8px;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
                 <span style="color:#fafafa;font-weight:600;">Eksikleri Tamamla:</span>
-                <select id="completeAccountSelect" style="padding:0.5rem 1rem;border-radius:4px;border:1px solid #ef4444;background:#27272a;color:#fafafa;font-size:0.9rem;">
-                    <option value="auto">Otomatik (Gemini + Grok)</option>
-                    <option value="1">Gemini Pro Hesap 1</option>
-                    <option value="2">Gemini Pro Hesap 2</option>
-                    <option value="3">Gemini Pro Hesap 3</option>
-                </select>
-                <button class="btn-danger" onclick="completeProject('${d.project_name}')" style="padding:0.5rem 1.5rem;">Baslat</button>
+                <input type="hidden" id="completeAccountSelect" value="auto">
+                <button class="btn-danger" onclick="completeProject('${d.project_name}')" style="padding:0.5rem 1.5rem;">Baslat (Gemini + Grok)</button>
             </div>`;
 
             // Images Section
@@ -1095,6 +1110,30 @@ style: "friendly"
                         label.style.opacity = acc.remaining <= 0 ? '0.5' : '1';
                     }
                 }
+            }
+        }
+
+        // Manuel kullanım güncelle
+        async function updateManualUsage() {
+            const accountId = document.getElementById('manualUsageAccount').value;
+            const usage = document.getElementById('manualUsageValue').value;
+
+            try {
+                const res = await fetch('/api/gemini-pro/update-usage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_id: parseInt(accountId), usage: parseInt(usage) })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert(data.message);
+                    loadGeminiProStatus(); // Durumu yenile
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
             }
         }
 

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Hesap limitleri
 DAILY_VIDEO_LIMIT = 3
-TOTAL_ACCOUNTS = 3
+TOTAL_ACCOUNTS = 4
 
 # Gemini Pro URL
 GEMINI_URL = "https://gemini.google.com"
@@ -414,7 +414,7 @@ class GeminiProAccount:
         """Görsel upload et ve prompt gönder - geliştirilmiş versiyon"""
         try:
             self._update_progress(f"Görsel upload ediliyor: {os.path.basename(image_path)}", 40)
-            time.sleep(2)
+            time.sleep(1)
 
             absolute_path = os.path.abspath(image_path)
             logger.info(f"Upload edilecek görsel: {absolute_path}")
@@ -425,80 +425,108 @@ class GeminiProAccount:
 
             uploaded = False
 
-            # ===== YÖNTEM 1: Gemini'nin attachment butonunu bul ve tıkla =====
+            # ===== YÖNTEM 1: Clipboard yapıştırma (EN HIZLI - macOS) =====
             try:
-                logger.info("Yöntem 1: Gemini attachment butonu aranıyor...")
+                logger.info("Yöntem 1: Clipboard yapıştırma deneniyor...")
+                import subprocess
 
-                # Gemini'deki attachment/upload butonları için çeşitli seçiciler
-                attachment_selectors = [
-                    # Gemini'nin + butonu (input alanının solunda)
-                    'button[aria-label*="dosya" i]',
-                    'button[aria-label*="file" i]',
-                    'button[aria-label*="upload" i]',
-                    'button[aria-label*="yükle" i]',
-                    'button[aria-label*="ekle" i]',
-                    'button[aria-label*="add" i]',
-                    # Material icon butonları
-                    'button[mattooltip*="upload" i]',
-                    'button[mattooltip*="file" i]',
-                    'button[mattooltip*="add" i]',
-                    # Genel seçiciler
-                    '[data-tooltip*="upload" i]',
-                    '[data-tooltip*="file" i]',
-                    '.upload-button',
-                    '.attachment-button',
-                    # Input alanı yanındaki butonlar
-                    'rich-textarea button',
-                    '.input-area button',
-                    '.ql-editor-container button',
-                ]
+                # Görseli clipboard'a kopyala
+                copy_result = subprocess.run([
+                    'osascript', '-e',
+                    f'set the clipboard to (read (POSIX file "{absolute_path}") as TIFF picture)'
+                ], capture_output=True, timeout=10)
 
-                for selector in attachment_selectors:
-                    try:
-                        btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        for btn in btns:
-                            if btn.is_displayed():
-                                logger.info(f"Buton bulundu: {selector}")
-                                btn.click()
-                                time.sleep(1)
+                if copy_result.returncode == 0:
+                    # Input alanına tıkla ve yapıştır
+                    input_area = self._find_input_element()
+                    if input_area:
+                        input_area.click()
+                        time.sleep(0.5)
 
-                                # Menü açıldıysa "Upload file" seçeneğini bul
-                                menu_selectors = [
-                                    '[role="menuitem"]',
-                                    '[role="option"]',
-                                    '.dropdown-item',
-                                    '.menu-item',
-                                ]
-                                for menu_sel in menu_selectors:
-                                    items = self.driver.find_elements(By.CSS_SELECTOR, menu_sel)
-                                    for item in items:
-                                        text = (item.text or '').lower()
-                                        if any(x in text for x in ['upload', 'file', 'dosya', 'yükle']):
-                                            item.click()
-                                            logger.info(f"Menü öğesi tıklandı: {text}")
-                                            time.sleep(1)
-                                            break
+                        # Cmd+V ile yapıştır
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.driver)
+                        actions.key_down(Keys.COMMAND).send_keys('v').key_up(Keys.COMMAND).perform()
+                        time.sleep(2)
 
-                                # File input kontrol et
-                                time.sleep(0.5)
-                                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                                for fi in file_inputs:
-                                    try:
-                                        fi.send_keys(absolute_path)
-                                        uploaded = True
-                                        logger.info("✅ Yöntem 1: Attachment butonu ile upload başarılı")
-                                        time.sleep(3)
-                                        break
-                                    except:
-                                        continue
-                                if uploaded:
-                                    break
-                        if uploaded:
-                            break
-                    except:
-                        continue
+                        # Upload başarılı mı kontrol et
+                        if self._check_image_uploaded():
+                            uploaded = True
+                            logger.info("✅ Yöntem 1: Clipboard yapıştırma başarılı")
             except Exception as e:
-                logger.debug(f"Attachment butonu denemesi: {e}")
+                logger.debug(f"Clipboard denemesi: {e}")
+
+            # ===== YÖNTEM 2: Gemini'nin attachment butonunu bul ve tıkla =====
+            if not uploaded:
+                try:
+                    logger.info("Yöntem 2: Gemini attachment butonu aranıyor...")
+
+                    # Gemini'deki attachment/upload butonları için çeşitli seçiciler
+                    attachment_selectors = [
+                        'button[aria-label*="dosya" i]',
+                        'button[aria-label*="file" i]',
+                        'button[aria-label*="upload" i]',
+                        'button[aria-label*="yükle" i]',
+                        'button[aria-label*="ekle" i]',
+                        'button[aria-label*="add" i]',
+                        'button[mattooltip*="upload" i]',
+                        'button[mattooltip*="file" i]',
+                        'button[mattooltip*="add" i]',
+                        '[data-tooltip*="upload" i]',
+                        '[data-tooltip*="file" i]',
+                        '.upload-button',
+                        '.attachment-button',
+                        'rich-textarea button',
+                        '.input-area button',
+                        '.ql-editor-container button',
+                    ]
+
+                    for selector in attachment_selectors:
+                        try:
+                            btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                            for btn in btns:
+                                if btn.is_displayed():
+                                    logger.info(f"Buton bulundu: {selector}")
+                                    btn.click()
+                                    time.sleep(1)
+
+                                    # Menü açıldıysa "Upload file" seçeneğini bul
+                                    menu_selectors = [
+                                        '[role="menuitem"]',
+                                        '[role="option"]',
+                                        '.dropdown-item',
+                                        '.menu-item',
+                                    ]
+                                    for menu_sel in menu_selectors:
+                                        items = self.driver.find_elements(By.CSS_SELECTOR, menu_sel)
+                                        for item in items:
+                                            text = (item.text or '').lower()
+                                            if any(x in text for x in ['upload', 'file', 'dosya', 'yükle']):
+                                                item.click()
+                                                logger.info(f"Menü öğesi tıklandı: {text}")
+                                                time.sleep(1)
+                                                break
+
+                                    # File input kontrol et
+                                    time.sleep(0.5)
+                                    file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+                                    for fi in file_inputs:
+                                        try:
+                                            fi.send_keys(absolute_path)
+                                            uploaded = True
+                                            logger.info("✅ Yöntem 2: Attachment butonu ile upload başarılı")
+                                            time.sleep(3)
+                                            break
+                                        except:
+                                            continue
+                                    if uploaded:
+                                        break
+                            if uploaded:
+                                break
+                        except:
+                            continue
+                except Exception as e:
+                    logger.debug(f"Attachment butonu denemesi: {e}")
 
             # ===== YÖNTEM 2: Gizli file input'ları bul ve kullan =====
             if not uploaded:
@@ -588,43 +616,6 @@ class GeminiProAccount:
                             logger.warning("Yöntem 3: File input tetiklendi ama görsel görünmüyor")
                 except Exception as e:
                     logger.debug(f"JavaScript file input denemesi: {e}")
-
-            # ===== YÖNTEM 4: Clipboard yapıştırma (macOS) =====
-            if not uploaded:
-                try:
-                    logger.info("Yöntem 4: Clipboard yapıştırma deneniyor...")
-                    import subprocess
-
-                    # Görseli clipboard'a kopyala
-                    # osascript ile TIFF/PNG olarak kopyala
-                    copy_result = subprocess.run([
-                        'osascript', '-e',
-                        f'set the clipboard to (read (POSIX file "{absolute_path}") as TIFF picture)'
-                    ], capture_output=True, timeout=10)
-
-                    if copy_result.returncode != 0:
-                        logger.warning(f"Clipboard kopyalama hatası: {copy_result.stderr.decode()}")
-
-                    # Input alanına tıkla ve yapıştır
-                    input_area = self._find_input_element()
-                    if input_area:
-                        input_area.click()
-                        time.sleep(0.5)
-
-                        # Cmd+V ile yapıştır
-                        from selenium.webdriver.common.action_chains import ActionChains
-                        actions = ActionChains(self.driver)
-                        actions.key_down(Keys.COMMAND).send_keys('v').key_up(Keys.COMMAND).perform()
-                        time.sleep(3)
-
-                        # Upload başarılı mı kontrol et
-                        if self._check_image_uploaded():
-                            uploaded = True
-                            logger.info("✅ Yöntem 4: Clipboard yapıştırma başarılı")
-                        else:
-                            logger.warning("Yöntem 4: Yapıştırıldı ama görsel görünmüyor")
-                except Exception as e:
-                    logger.debug(f"Clipboard denemesi: {e}")
 
             if uploaded:
                 time.sleep(3)  # Upload'ın tamamlanmasını bekle
@@ -1099,6 +1090,11 @@ class GeminiProAccount:
             '[class*="video"] video',
             'model-response video',
             'message-content video',
+            # Yeni Gemini Pro selectors
+            'veo-video-player video',
+            '[class*="veo"] video',
+            '[class*="generated"] video',
+            'div[data-video-id] video',
         ]
 
         for selector in selectors:
@@ -1129,19 +1125,27 @@ class GeminiProAccount:
         if not videos:
             try:
                 all_videos = self.driver.find_elements(By.TAG_NAME, 'video')
+                logger.info(f"Sayfada toplam {len(all_videos)} video elementi var")
                 for vid in all_videos:
                     try:
                         src = vid.get_attribute('src') or ''
                         # currentSrc'yi de kontrol et
                         if not src:
                             src = vid.get_attribute('currentSrc') or ''
+                        outer_html = vid.get_attribute('outerHTML')[:200] if vid.get_attribute('outerHTML') else ''
+                        logger.info(f"Video elementi: src={src[:50] if src else 'YOK'}, html={outer_html}")
                         if src:
                             videos.append(vid)
                             logger.info(f"Alternatif video bulundu: {src[:100]}...")
-                    except:
+                        elif vid.is_displayed():
+                            # src olmasa bile görünen video ekle
+                            videos.append(vid)
+                            logger.info("Video elementi eklendi (src yok ama görünür)")
+                    except Exception as e:
+                        logger.debug(f"Video elementi hatası: {e}")
                         continue
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Video arama hatası: {e}")
 
         logger.info(f"Toplam {len(videos)} video bulundu")
         return videos
@@ -1254,20 +1258,26 @@ class GeminiProAccount:
             except Exception as e:
                 logger.warning(f"İndirme butonu bulunamadı: {e}")
 
-            # YÖNTEM 2: JavaScript ile indirme
+            # YÖNTEM 2: JavaScript fetch ile indirme (blob olarak)
             if not download_clicked and video_src and video_src.startswith('http'):
                 try:
                     filename = os.path.basename(save_path)
-                    self.driver.execute_script(f"""
+                    logger.info(f"JavaScript fetch ile indirme deneniyor: {video_src[:80]}...")
+
+                    # Önce basit a.click() dene
+                    self.driver.execute_script("""
                         var a = document.createElement('a');
-                        a.href = '{video_src}';
-                        a.download = '{filename}';
+                        a.href = arguments[0];
+                        a.download = arguments[1];
+                        a.target = '_blank';
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
-                    """)
-                    logger.info("JavaScript ile indirme tetiklendi")
-                    time.sleep(5)
+                    """, video_src, filename)
+
+                    logger.info("JavaScript a.click() ile indirme tetiklendi")
+                    time.sleep(8)  # İndirme için bekle
+
                 except Exception as e:
                     logger.warning(f"JS indirme başarısız: {e}")
 
@@ -1299,17 +1309,47 @@ class GeminiProAccount:
                 self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
                 return save_path
 
-            # YÖNTEM 4: Doğrudan URL'den indir (http/https için)
+            # YÖNTEM 4: Doğrudan URL'den indir (http/https için) - Selenium çerezleri ile
             if video_src and video_src.startswith('http'):
                 try:
-                    import urllib.request
-                    urllib.request.urlretrieve(video_src, save_path)
-                    if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
-                        logger.info(f"URL'den indirildi: {save_path}")
-                        self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
-                        return save_path
+                    import requests
+
+                    # Selenium'dan çerezleri al
+                    session = requests.Session()
+                    for cookie in self.driver.get_cookies():
+                        session.cookies.set(cookie['name'], cookie['value'], domain=cookie.get('domain', ''))
+
+                    # User-Agent ekle
+                    headers = {
+                        'User-Agent': self.driver.execute_script("return navigator.userAgent"),
+                        'Referer': self.driver.current_url
+                    }
+
+                    logger.info(f"Çerezlerle video indiriliyor: {video_src[:80]}...")
+                    response = session.get(video_src, headers=headers, stream=True, timeout=60)
+
+                    # Content-Type kontrolü
+                    content_type = response.headers.get('Content-Type', '')
+                    logger.info(f"Response Content-Type: {content_type}")
+
+                    if 'video' in content_type or 'octet-stream' in content_type:
+                        with open(save_path, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+
+                        if os.path.exists(save_path) and os.path.getsize(save_path) > 50000:
+                            logger.info(f"URL'den indirildi: {save_path} ({os.path.getsize(save_path)} bytes)")
+                            self._update_progress(f"Video kaydedildi: {os.path.basename(save_path)}", 90)
+                            return save_path
+                        else:
+                            logger.warning(f"İndirilen dosya çok küçük veya yok: {save_path}")
+                    else:
+                        logger.warning(f"Content-Type video değil: {content_type}")
+
                 except Exception as e:
                     logger.warning(f"URL indirme başarısız: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             logger.warning("Video indirilemedi - tüm yöntemler başarısız")
             return None
@@ -1798,8 +1838,8 @@ class DailyShortsMode:
                 self.manager._update_progress(f"[{i}] Temiz görsel yükleniyor...", 33 + (i * 8))
 
                 video_prompt = prompt_data.get("video_prompt", "")
-                # Video prompt'u hazırla
-                full_video_prompt = f"Create a short cinematic video animation from this image. {self.video_format_desc}. {video_prompt}"
+                # Video prompt'u hazırla - Gemini'ye video oluşturma talimatı
+                full_video_prompt = f"Turn this image into a video. Animate this image as a 5-8 second cinematic video. {self.video_format_desc}. {video_prompt}"
 
                 prev_video_count = account._count_generated_videos()
 
@@ -1973,14 +2013,16 @@ class DailyShortsMode:
         self.manager._update_progress(f"Tamamlandı: {success_count}/{len(prompts)} başarılı", 100)
         return results
 
-    def retry_failed(self, project_dir: str, indices: List[int] = None) -> Dict[str, Any]:
+    def retry_failed(self, project_dir: str, indices: List[int] = None, selected_account: str = "auto") -> Dict[str, Any]:
         """
         Başarısız olan prompt'ları yeniden dene
 
         Args:
             project_dir: Proje klasörü
             indices: Belirli indeksler (None ise tüm başarısızlar)
+            selected_account: Kullanılacak hesap ("auto", "1", "2", "3")
         """
+        logger.info(f"retry_failed called with selected_account: '{selected_account}'")
         project_data = self._load_project_json(project_dir)
         if not project_data:
             return {"error": "project.json bulunamadı"}
@@ -2043,10 +2085,19 @@ class DailyShortsMode:
 
             self.manager._update_progress(f"[{i}] Yeniden deneniyor (durum: {current_status})...", 20)
 
-            account = self.manager.get_available_account()
-            if not account:
-                results["error"] = "Tüm hesapların limiti doldu"
-                break
+            # Hesap seçimi
+            if selected_account != "auto":
+                account_id = int(selected_account)
+                account = self.manager.get_account_by_id(account_id)
+                if not account:
+                    results["error"] = f"Hesap {account_id} bulunamadı"
+                    break
+                logger.info(f"Seçilen hesap kullanılıyor: Hesap {account_id}")
+            else:
+                account = self.manager.get_available_account()
+                if not account:
+                    results["error"] = "Tüm hesapların limiti doldu"
+                    break
 
             if not account.driver:
                 if not account.start_browser() or not account.navigate_to_gemini():
@@ -2110,7 +2161,7 @@ class DailyShortsMode:
                     # Eğer görsel zaten vardıysa (image_done), temizlenmiş görseli upload et
                     if needs_image:
                         # Görsel yeni oluşturuldu, aynı sohbette video iste
-                        full_prompt = f"Now create a short cinematic video animation from this image you just generated. {video_format_desc}. {video_prompt}"
+                        full_prompt = f"Now turn this image into a video. Animate it as a 5-8 second cinematic video. {video_format_desc}. {video_prompt}"
                         prev_count = account._count_generated_videos()
 
                         if not account.send_prompt(full_prompt):
@@ -2123,7 +2174,7 @@ class DailyShortsMode:
                         if not os.path.exists(cleaned_image_path):
                             cleaned_image_path = os.path.join(project_dir, f"image_{i}.png")
 
-                        full_prompt = f"Using this image, create a short cinematic video animation. {video_format_desc}. {video_prompt}"
+                        full_prompt = f"Turn this uploaded image into a video. Animate it as a 5-8 second cinematic video. {video_format_desc}. {video_prompt}"
                         prev_count = account._count_generated_videos()
 
                         # Görseli upload et ve prompt gönder
