@@ -358,7 +358,7 @@ class GeminiProAccount:
             return False
 
     def upload_and_prompt(self, image_path: str, prompt: str) -> bool:
-        """Görsel upload et ve prompt gönder"""
+        """Görsel upload et ve prompt gönder - geliştirilmiş versiyon"""
         try:
             self._update_progress(f"Görsel upload ediliyor: {os.path.basename(image_path)}", 40)
             time.sleep(2)
@@ -370,95 +370,162 @@ class GeminiProAccount:
                 logger.error(f"Görsel dosyası bulunamadı: {absolute_path}")
                 return False
 
-            # Önce file input'u dene (bazı durumlarda doğrudan erişilebilir)
-            file_input = None
             uploaded = False
 
-            # Yöntem 1: Doğrudan file input
+            # ===== YÖNTEM 1: File input'u direkt bul ve kullan =====
             try:
+                logger.info("Yöntem 1: File input aranıyor...")
+                # Önce gizli input'ları görünür yap
+                self.driver.execute_script("""
+                    document.querySelectorAll('input[type="file"]').forEach(function(input) {
+                        input.style.cssText = 'display:block !important; visibility:visible !important; opacity:1 !important; position:relative !important;';
+                    });
+                """)
+                time.sleep(0.5)
+
                 file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+                logger.info(f"Bulunan file input sayısı: {len(file_inputs)}")
+
                 for fi in file_inputs:
                     try:
                         fi.send_keys(absolute_path)
                         uploaded = True
-                        logger.info("Yöntem 1: Doğrudan file input ile upload başarılı")
+                        logger.info("✅ Yöntem 1: File input ile upload başarılı")
+                        time.sleep(2)  # Upload'ın işlenmesini bekle
                         break
-                    except:
+                    except Exception as e:
+                        logger.debug(f"File input hatası: {e}")
                         continue
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"File input denemesi: {e}")
 
-            # Yöntem 2: + veya Add butonuna tıkla
-            if not uploaded:
-                add_buttons = [
-                    (By.CSS_SELECTOR, 'button[aria-label*="Add"]'),
-                    (By.CSS_SELECTOR, 'button[aria-label*="Ekle"]'),
-                    (By.CSS_SELECTOR, 'button[aria-label*="Upload"]'),
-                    (By.CSS_SELECTOR, 'button[aria-label*="Yükle"]'),
-                    (By.CSS_SELECTOR, 'button[aria-label*="attachment"]'),
-                    (By.CSS_SELECTOR, 'button[aria-label*="file"]'),
-                    (By.CSS_SELECTOR, '[data-tooltip*="Upload"]'),
-                    (By.CSS_SELECTOR, '.add-image-button'),
-                    (By.XPATH, "//button[contains(@aria-label,'Add') or contains(@aria-label,'add')]"),
-                    (By.XPATH, "//button[contains(@aria-label,'Upload') or contains(@aria-label,'upload')]"),
-                ]
-
-                for by, selector in add_buttons:
-                    try:
-                        buttons = self.driver.find_elements(by, selector)
-                        for btn in buttons:
-                            if btn.is_displayed():
-                                btn.click()
-                                logger.info(f"Add butonu tıklandı: {selector}")
-                                time.sleep(1)
-                                # Şimdi file input'u tekrar dene
-                                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                                for fi in file_inputs:
-                                    try:
-                                        fi.send_keys(absolute_path)
-                                        uploaded = True
-                                        logger.info("Yöntem 2: Add buton + file input ile upload başarılı")
-                                        break
-                                    except:
-                                        continue
-                                if uploaded:
-                                    break
-                        if uploaded:
-                            break
-                    except:
-                        continue
-
-            # Yöntem 3: JavaScript ile file input oluştur ve tetikle
+            # ===== YÖNTEM 2: + butonuna tıkla ve Upload file seç =====
             if not uploaded:
                 try:
-                    # Sayfadaki tüm file input'ları görünür yap
-                    self.driver.execute_script("""
-                        var inputs = document.querySelectorAll('input[type="file"]');
-                        inputs.forEach(function(input) {
-                            input.style.display = 'block';
-                            input.style.visibility = 'visible';
-                            input.style.opacity = '1';
-                        });
-                    """)
-                    time.sleep(0.5)
+                    logger.info("Yöntem 2: + butonu aranıyor...")
+                    # Gemini'deki + veya attachment butonu
+                    plus_selectors = [
+                        'button[aria-label*="Add"]',
+                        'button[aria-label*="Ekle"]',
+                        'button[aria-label*="attachment" i]',
+                        'button[aria-label*="ek" i]',
+                        '[data-test-id*="add"]',
+                        '[class*="attachment"]',
+                        '[class*="add-file"]',
+                        'button[jsname] mat-icon',  # Material icon butonları
+                    ]
 
-                    file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                    for fi in file_inputs:
+                    for selector in plus_selectors:
                         try:
-                            fi.send_keys(absolute_path)
-                            uploaded = True
-                            logger.info("Yöntem 3: JavaScript ile görünür yapıp upload başarılı")
-                            break
+                            btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                            for btn in btns:
+                                if btn.is_displayed():
+                                    btn.click()
+                                    logger.info(f"+ butonu tıklandı: {selector}")
+                                    time.sleep(1)
+
+                                    # File input tekrar kontrol et
+                                    file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+                                    for fi in file_inputs:
+                                        try:
+                                            fi.send_keys(absolute_path)
+                                            uploaded = True
+                                            logger.info("✅ Yöntem 2: + butonu sonrası file input başarılı")
+                                            time.sleep(2)
+                                            break
+                                        except:
+                                            continue
+                                    if uploaded:
+                                        break
+                            if uploaded:
+                                break
                         except:
                             continue
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"+ butonu denemesi: {e}")
+
+            # ===== YÖNTEM 3: Drag & Drop simülasyonu =====
+            if not uploaded:
+                try:
+                    # Input alanını bul
+                    input_area = self._find_input_element()
+                    if input_area:
+                        # JavaScript ile dosya input'u oluştur ve tetikle
+                        self.driver.execute_script("""
+                            var input = document.createElement('input');
+                            input.type = 'file';
+                            input.id = 'temp-file-input-gemini';
+                            input.style.cssText = 'position:fixed; top:0; left:0; z-index:99999;';
+                            document.body.appendChild(input);
+                        """)
+                        time.sleep(0.5)
+
+                        temp_input = self.driver.find_element(By.ID, 'temp-file-input-gemini')
+                        temp_input.send_keys(absolute_path)
+
+                        # DataTransfer ile drop eventi simüle et
+                        self.driver.execute_script("""
+                            var input = document.getElementById('temp-file-input-gemini');
+                            var file = input.files[0];
+                            if (file) {
+                                var dataTransfer = new DataTransfer();
+                                dataTransfer.items.add(file);
+
+                                var dropTarget = arguments[0];
+                                var dropEvent = new DragEvent('drop', {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    dataTransfer: dataTransfer
+                                });
+                                dropTarget.dispatchEvent(dropEvent);
+                            }
+                            input.remove();
+                        """, input_area)
+
+                        time.sleep(2)
+                        # Upload başarılı mı kontrol et
+                        uploaded = True
+                        logger.info("Yöntem 3: Drag & drop simülasyonu ile upload denendi")
+                except Exception as e:
+                    logger.debug(f"Drag & drop denemesi: {e}")
+
+            # ===== YÖNTEM 4: Clipboard yapıştırma (macOS) =====
+            if not uploaded:
+                try:
+                    logger.info("Yöntem 4: Clipboard yapıştırma deneniyor...")
+                    import subprocess
+
+                    # PNG olarak clipboard'a kopyala (JPEG yerine PNG daha iyi sonuç verebilir)
+                    result = subprocess.run(['osascript', '-e',
+                        f'set the clipboard to (read (POSIX file "{absolute_path}") as «class PNGf»)'],
+                        capture_output=True, timeout=5)
+
+                    if result.returncode != 0:
+                        # JPEG dene
+                        subprocess.run(['osascript', '-e',
+                            f'set the clipboard to (read (POSIX file "{absolute_path}") as JPEG picture)'],
+                            capture_output=True, timeout=5)
+
+                    # Input alanına yapıştır
+                    input_area = self._find_input_element()
+                    if input_area:
+                        input_area.click()
+                        time.sleep(0.5)
+                        # Cmd+V
+                        from selenium.webdriver.common.keys import Keys
+                        input_area.send_keys(Keys.COMMAND, 'v')
+                        time.sleep(2)
+                        uploaded = True
+                        logger.info("✅ Yöntem 4: Clipboard yapıştırma denendi")
+                except Exception as e:
+                    logger.debug(f"Clipboard denemesi: {e}")
 
             if uploaded:
                 time.sleep(3)  # Upload'ın tamamlanmasını bekle
                 self._update_progress("Görsel yüklendi", 45)
             else:
-                logger.warning("⚠️ Görsel upload edilemedi - sadece prompt gönderilecek")
+                logger.error("❌ TÜM UPLOAD YÖNTEMLERİ BAŞARISIZ!")
+                return False  # Upload başarısız olursa False dön
 
             # Input alanını bul ve prompt yaz
             input_element = self._find_input_element()
@@ -505,27 +572,71 @@ class GeminiProAccount:
             return False
 
     def _find_generated_images(self) -> List:
-        """Sayfadaki oluşturulmuş görselleri bul"""
+        """Sayfadaki oluşturulmuş görselleri bul - Gemini'ye özgü"""
         images = []
+        seen_srcs = set()
+
+        # Gemini'ye özgü seçiciler - öncelik sırasına göre
         selectors = [
-            'img[src*="blob:"]',
+            # Gemini response içindeki görseller
+            'model-response img',
+            'message-content img',
+            '[data-message-author-role="model"] img',
+            'response-container img',
+
+            # Blob ve hosted görseller
+            'img[src^="blob:"]',
             'img[src*="googleusercontent"]',
-            'img[data-src*="googleusercontent"]',
+            'img[src*="gstatic"]',
+            'img[src*="ggpht"]',
+
+            # Generated image container'lar
             '.generated-image img',
+            '[class*="generated"] img',
+            '[class*="image-container"] img',
+            '[class*="media-container"] img',
+
+            # Alt text ile
             'img[alt*="Generated"]',
+            'img[alt*="generated"]',
+            'img[alt*="Image"]',
+
+            # Data attribute'lar
+            'img[data-src*="googleusercontent"]',
+            'img[data-image-url]',
         ]
 
         for selector in selectors:
             try:
                 found = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 for img in found:
-                    if img.is_displayed():
-                        src = img.get_attribute('src') or img.get_attribute('data-src')
-                        if src and src not in [i.get_attribute('src') for i in images]:
+                    try:
+                        if not img.is_displayed():
+                            continue
+
+                        # Boyut kontrolü - çok küçük görselleri atla (icon vb.)
+                        width = img.size.get('width', 0)
+                        height = img.size.get('height', 0)
+                        if width < 100 or height < 100:
+                            continue
+
+                        src = img.get_attribute('src') or img.get_attribute('data-src') or ''
+
+                        # Avatar ve icon'ları atla
+                        if any(x in src.lower() for x in ['avatar', 'icon', 'logo', 'profile']):
+                            continue
+
+                        # Daha önce eklenmediyse ekle
+                        if src and src not in seen_srcs:
+                            seen_srcs.add(src)
                             images.append(img)
+                            logger.debug(f"Görsel bulundu: {src[:80]}... ({width}x{height})")
+                    except:
+                        continue
             except:
                 continue
 
+        logger.info(f"Toplam {len(images)} görsel bulundu")
         return images
 
     def _count_generated_images(self) -> int:
@@ -570,7 +681,7 @@ class GeminiProAccount:
             return False
 
     def download_latest_image(self, save_path: str) -> Optional[str]:
-        """En son oluşturulan görseli indir - Gerçek indirme"""
+        """En son oluşturulan görseli indir - Gerçek indirme (ASLA screenshot yok)"""
         try:
             self._update_progress("Görsel indiriliyor...", 55)
 
@@ -581,6 +692,8 @@ class GeminiProAccount:
 
             # En son görseli al
             latest_image = images[-1]
+            img_src = latest_image.get_attribute('src') or ""
+            logger.info(f"Görsel src: {img_src[:100]}...")
 
             # İndirme öncesi dosyaları kaydet
             downloads_dir = os.path.expanduser("~/Downloads")
@@ -588,21 +701,84 @@ class GeminiProAccount:
             for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
                 files_before.update(glob.glob(os.path.join(downloads_dir, ext)))
 
-            # YÖNTEM 1: Görselin üzerine gelip indirme butonunu bul
+            # ===== YÖNTEM 1: Canvas ile blob/data URL'den tam çözünürlük görsel çıkar =====
+            try:
+                logger.info("Yöntem 1: Canvas ile görsel çıkarılıyor...")
+                # JavaScript ile görseli canvas'a çiz ve base64 olarak al
+                canvas_script = """
+                var img = arguments[0];
+                var canvas = document.createElement('canvas');
+
+                // Gerçek boyutları al (naturalWidth/Height tam çözünürlük verir)
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                // PNG formatında base64 string olarak döndür
+                return {
+                    data: canvas.toDataURL('image/png'),
+                    width: canvas.width,
+                    height: canvas.height
+                };
+                """
+                result = self.driver.execute_script(canvas_script, latest_image)
+
+                if result and result.get('data') and result['data'].startswith('data:image'):
+                    import base64
+                    # "data:image/png;base64," kısmını kaldır
+                    base64_data = result['data'].split(',')[1]
+                    image_data = base64.b64decode(base64_data)
+
+                    # Dosyayı yaz
+                    with open(save_path, 'wb') as f:
+                        f.write(image_data)
+
+                    if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                        logger.info(f"✅ Canvas ile indirildi: {save_path} ({result['width']}x{result['height']})")
+                        self._update_progress(f"Görsel kaydedildi: {result['width']}x{result['height']}", 60)
+                        return save_path
+                    else:
+                        logger.warning(f"Canvas dosyası çok küçük: {os.path.getsize(save_path)} bytes")
+            except Exception as e:
+                logger.warning(f"Canvas yöntemi başarısız: {e}")
+
+            # ===== YÖNTEM 2: Gemini'nin indirme butonunu bul ve tıkla =====
             download_clicked = False
             try:
+                logger.info("Yöntem 2: İndirme butonu aranıyor...")
                 from selenium.webdriver.common.action_chains import ActionChains
+
+                # Görsele tıkla - büyük görüntü moduna geçebilir
+                try:
+                    latest_image.click()
+                    time.sleep(1)
+                except:
+                    pass
+
+                # Hover yap
                 actions = ActionChains(self.driver)
                 actions.move_to_element(latest_image).perform()
                 time.sleep(1)
 
+                # Gemini'ye özgü ve genel indirme buton seçicileri
                 download_selectors = [
-                    'button[data-test-id="download-generated-image-button"]',
-                    'button[aria-label*="download" i]',
-                    'button[aria-label*="Download" i]',
-                    'button[aria-label*="indir" i]',
-                    '[data-tooltip*="download" i]',
+                    # Gemini özgü
+                    'button[data-test-id="download-button"]',
+                    'button[jsname*="download" i]',
+                    'button[data-idom-class*="download" i]',
+                    '[aria-label*="Download" i]',
+                    '[aria-label*="İndir" i]',
+                    '[data-tooltip*="Download" i]',
+                    '[data-tooltip*="İndir" i]',
+                    # Mat-icon-button tarzı
+                    'button mat-icon[fonticon="download"]',
+                    'button[mattooltip*="download" i]',
+                    # Genel
                     'button.download-button',
+                    '.download-icon',
+                    '[class*="download"]',
                 ]
 
                 for selector in download_selectors:
@@ -612,57 +788,91 @@ class GeminiProAccount:
                             if btn.is_displayed():
                                 btn.click()
                                 download_clicked = True
-                                logger.info(f"İndirme butonu tıklandı: {selector}")
+                                logger.info(f"✅ İndirme butonu tıklandı: {selector}")
                                 time.sleep(3)
                                 break
                         if download_clicked:
                             break
                     except:
                         continue
+
+                # ESC ile modalı kapat
+                if not download_clicked:
+                    try:
+                        self.driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                    except:
+                        pass
             except Exception as e:
-                logger.warning(f"Hover/click yöntemi başarısız: {e}")
+                logger.warning(f"İndirme butonu yöntemi başarısız: {e}")
 
-            # YÖNTEM 2: Sağ tık menüsünden indir
-            if not download_clicked:
+            # ===== YÖNTEM 3: HTTP(S) URL'den doğrudan indir =====
+            if not download_clicked and img_src.startswith('http'):
                 try:
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    actions = ActionChains(self.driver)
-                    actions.context_click(latest_image).perform()
-                    time.sleep(0.5)
+                    logger.info("Yöntem 3: HTTP URL'den indiriliyor...")
+                    import urllib.request
 
-                    # "Save image as" seç
-                    save_items = self.driver.find_elements(By.CSS_SELECTOR,
-                        '[role="menuitem"], [data-testid*="save"], [data-testid*="download"]')
-                    for item in save_items:
-                        text = item.text.lower()
-                        if 'save' in text or 'download' in text or 'kaydet' in text or 'indir' in text:
-                            item.click()
-                            download_clicked = True
-                            logger.info("Sağ tık menüsünden indirme seçildi")
-                            time.sleep(3)
-                            break
+                    # Headers ekle (Gemini URL'leri için gerekli olabilir)
+                    opener = urllib.request.build_opener()
+                    opener.addheaders = [
+                        ('User-Agent', 'Mozilla/5.0'),
+                        ('Referer', 'https://gemini.google.com/')
+                    ]
+                    urllib.request.install_opener(opener)
 
-                    # Menüyü kapat
-                    if not download_clicked:
-                        self.driver.find_element(By.TAG_NAME, 'body').click()
-                except Exception as e:
-                    logger.warning(f"Sağ tık yöntemi başarısız: {e}")
-
-            # YÖNTEM 3: JavaScript ile src URL'den indir
-            if not download_clicked:
-                try:
-                    img_src = latest_image.get_attribute('src')
-                    if img_src and img_src.startswith('http'):
-                        import urllib.request
-                        urllib.request.urlretrieve(img_src, save_path)
-                        if os.path.exists(save_path) and os.path.getsize(save_path) > 1000:
-                            logger.info(f"URL'den indirildi: {save_path}")
-                            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
-                            return save_path
+                    urllib.request.urlretrieve(img_src, save_path)
+                    if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                        logger.info(f"✅ URL'den indirildi: {save_path}")
+                        self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                        return save_path
                 except Exception as e:
                     logger.warning(f"URL indirme başarısız: {e}")
 
-            # İndirilen dosyayı bul
+            # ===== YÖNTEM 4: Fetch API ile blob URL'yi çöz =====
+            if img_src.startswith('blob:'):
+                try:
+                    logger.info("Yöntem 4: Fetch API ile blob çözülüyor...")
+                    fetch_script = """
+                    var url = arguments[0];
+                    return fetch(url)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            return new Promise((resolve, reject) => {
+                                var reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.onerror = reject;
+                                reader.readAsDataURL(blob);
+                            });
+                        });
+                    """
+                    # Async script çalıştır
+                    data_url = self.driver.execute_async_script(f"""
+                    var callback = arguments[arguments.length - 1];
+                    fetch('{img_src}')
+                        .then(response => response.blob())
+                        .then(blob => {{
+                            var reader = new FileReader();
+                            reader.onloadend = () => callback(reader.result);
+                            reader.readAsDataURL(blob);
+                        }})
+                        .catch(err => callback(null));
+                    """)
+
+                    if data_url and data_url.startswith('data:image'):
+                        import base64
+                        base64_data = data_url.split(',')[1]
+                        image_data = base64.b64decode(base64_data)
+
+                        with open(save_path, 'wb') as f:
+                            f.write(image_data)
+
+                        if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                            logger.info(f"✅ Blob fetch ile indirildi: {save_path}")
+                            self._update_progress(f"Görsel kaydedildi", 60)
+                            return save_path
+                except Exception as e:
+                    logger.warning(f"Fetch API yöntemi başarısız: {e}")
+
+            # ===== YÖNTEM 5: Downloads klasöründe yeni dosya kontrol et =====
             time.sleep(3)
             files_after = set()
             for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
@@ -670,18 +880,18 @@ class GeminiProAccount:
 
             new_files = files_after - files_before
             if new_files:
-                # En yeni dosyayı al
                 newest = max(new_files, key=os.path.getmtime)
-                shutil.move(newest, save_path)
-                logger.info(f"Görsel indirildi ve taşındı: {save_path}")
-                self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
-                return save_path
+                # Dosya boyutunu kontrol et
+                if os.path.getsize(newest) > 10000:
+                    shutil.move(newest, save_path)
+                    logger.info(f"✅ Downloads'dan taşındı: {save_path}")
+                    self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                    return save_path
 
-            # YÖNTEM 4: Fallback - Screenshot (son çare)
-            logger.warning("İndirme başarısız, screenshot alınıyor...")
-            latest_image.screenshot(save_path)
-            self._update_progress(f"Görsel kaydedildi (screenshot): {os.path.basename(save_path)}", 60)
-            return save_path
+            # ===== SCREENSHOT ALMIYORUZ - gerçek indirme başarısız olduysa None dön =====
+            logger.error("❌ GÖRSEL İNDİRİLEMEDİ - Tüm yöntemler başarısız!")
+            logger.error(f"   - Görsel src: {img_src[:100] if img_src else 'YOK'}")
+            return None
 
         except Exception as e:
             logger.error(f"Görsel indirme hatası: {e}")
