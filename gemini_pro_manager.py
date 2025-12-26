@@ -209,6 +209,59 @@ class GeminiProAccount:
 
         return None
 
+    def _check_image_uploaded(self) -> bool:
+        """Upload edilen görselin görünüp görünmediğini kontrol et"""
+        try:
+            # Input alanında veya yanında görsel preview/thumbnail var mı kontrol et
+            preview_selectors = [
+                # Gemini'deki görsel preview'ları
+                'img[class*="preview"]',
+                'img[class*="thumbnail"]',
+                'img[class*="attachment"]',
+                'img[class*="uploaded"]',
+                '.attachment-preview img',
+                '.file-preview img',
+                '.upload-preview img',
+                # Input alanı içindeki görseller
+                '.input-area img',
+                'rich-textarea img',
+                '.ql-editor img',
+                # Chip/tag olarak görünen dosyalar
+                '.attachment-chip',
+                '.file-chip',
+                '[class*="attachment"][class*="chip"]',
+            ]
+
+            for selector in preview_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for el in elements:
+                        if el.is_displayed():
+                            logger.info(f"✅ Upload doğrulandı - görsel görünüyor: {selector}")
+                            return True
+                except:
+                    continue
+
+            # Alternatif: Input alanında herhangi bir görsel var mı?
+            try:
+                input_area = self._find_input_element()
+                if input_area:
+                    # Input container'ını bul
+                    parent = input_area.find_element(By.XPATH, '..')
+                    images = parent.find_elements(By.TAG_NAME, 'img')
+                    if images:
+                        for img in images:
+                            if img.is_displayed() and img.size['width'] > 50:
+                                logger.info("✅ Upload doğrulandı - input alanında görsel var")
+                                return True
+            except:
+                pass
+
+            return False
+        except Exception as e:
+            logger.debug(f"Upload doğrulama hatası: {e}")
+            return False
+
     def send_prompt(self, prompt: str) -> bool:
         """Prompt gönder"""
         try:
@@ -372,122 +425,169 @@ class GeminiProAccount:
 
             uploaded = False
 
-            # ===== YÖNTEM 1: File input'u direkt bul ve kullan =====
+            # ===== YÖNTEM 1: Gemini'nin attachment butonunu bul ve tıkla =====
             try:
-                logger.info("Yöntem 1: File input aranıyor...")
-                # Önce gizli input'ları görünür yap
-                self.driver.execute_script("""
-                    document.querySelectorAll('input[type="file"]').forEach(function(input) {
-                        input.style.cssText = 'display:block !important; visibility:visible !important; opacity:1 !important; position:relative !important;';
-                    });
-                """)
-                time.sleep(0.5)
+                logger.info("Yöntem 1: Gemini attachment butonu aranıyor...")
 
-                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                logger.info(f"Bulunan file input sayısı: {len(file_inputs)}")
+                # Gemini'deki attachment/upload butonları için çeşitli seçiciler
+                attachment_selectors = [
+                    # Gemini'nin + butonu (input alanının solunda)
+                    'button[aria-label*="dosya" i]',
+                    'button[aria-label*="file" i]',
+                    'button[aria-label*="upload" i]',
+                    'button[aria-label*="yükle" i]',
+                    'button[aria-label*="ekle" i]',
+                    'button[aria-label*="add" i]',
+                    # Material icon butonları
+                    'button[mattooltip*="upload" i]',
+                    'button[mattooltip*="file" i]',
+                    'button[mattooltip*="add" i]',
+                    # Genel seçiciler
+                    '[data-tooltip*="upload" i]',
+                    '[data-tooltip*="file" i]',
+                    '.upload-button',
+                    '.attachment-button',
+                    # Input alanı yanındaki butonlar
+                    'rich-textarea button',
+                    '.input-area button',
+                    '.ql-editor-container button',
+                ]
 
-                for fi in file_inputs:
+                for selector in attachment_selectors:
                     try:
-                        fi.send_keys(absolute_path)
-                        uploaded = True
-                        logger.info("✅ Yöntem 1: File input ile upload başarılı")
-                        time.sleep(2)  # Upload'ın işlenmesini bekle
-                        break
-                    except Exception as e:
-                        logger.debug(f"File input hatası: {e}")
+                        btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for btn in btns:
+                            if btn.is_displayed():
+                                logger.info(f"Buton bulundu: {selector}")
+                                btn.click()
+                                time.sleep(1)
+
+                                # Menü açıldıysa "Upload file" seçeneğini bul
+                                menu_selectors = [
+                                    '[role="menuitem"]',
+                                    '[role="option"]',
+                                    '.dropdown-item',
+                                    '.menu-item',
+                                ]
+                                for menu_sel in menu_selectors:
+                                    items = self.driver.find_elements(By.CSS_SELECTOR, menu_sel)
+                                    for item in items:
+                                        text = (item.text or '').lower()
+                                        if any(x in text for x in ['upload', 'file', 'dosya', 'yükle']):
+                                            item.click()
+                                            logger.info(f"Menü öğesi tıklandı: {text}")
+                                            time.sleep(1)
+                                            break
+
+                                # File input kontrol et
+                                time.sleep(0.5)
+                                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+                                for fi in file_inputs:
+                                    try:
+                                        fi.send_keys(absolute_path)
+                                        uploaded = True
+                                        logger.info("✅ Yöntem 1: Attachment butonu ile upload başarılı")
+                                        time.sleep(3)
+                                        break
+                                    except:
+                                        continue
+                                if uploaded:
+                                    break
+                        if uploaded:
+                            break
+                    except:
                         continue
             except Exception as e:
-                logger.debug(f"File input denemesi: {e}")
+                logger.debug(f"Attachment butonu denemesi: {e}")
 
-            # ===== YÖNTEM 2: + butonuna tıkla ve Upload file seç =====
+            # ===== YÖNTEM 2: Gizli file input'ları bul ve kullan =====
             if not uploaded:
                 try:
-                    logger.info("Yöntem 2: + butonu aranıyor...")
-                    # Gemini'deki + veya attachment butonu
-                    plus_selectors = [
-                        'button[aria-label*="Add"]',
-                        'button[aria-label*="Ekle"]',
-                        'button[aria-label*="attachment" i]',
-                        'button[aria-label*="ek" i]',
-                        '[data-test-id*="add"]',
-                        '[class*="attachment"]',
-                        '[class*="add-file"]',
-                        'button[jsname] mat-icon',  # Material icon butonları
-                    ]
+                    logger.info("Yöntem 2: Gizli file input aranıyor...")
+                    # Tüm file input'ları görünür yap
+                    self.driver.execute_script("""
+                        document.querySelectorAll('input[type="file"]').forEach(function(input) {
+                            input.style.cssText = 'display:block !important; visibility:visible !important; opacity:1 !important; position:absolute !important; top:0; left:0; z-index:99999;';
+                        });
+                    """)
+                    time.sleep(0.5)
 
-                    for selector in plus_selectors:
+                    file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+                    logger.info(f"Bulunan file input sayısı: {len(file_inputs)}")
+
+                    for fi in file_inputs:
                         try:
-                            btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                            for btn in btns:
-                                if btn.is_displayed():
-                                    btn.click()
-                                    logger.info(f"+ butonu tıklandı: {selector}")
-                                    time.sleep(1)
-
-                                    # File input tekrar kontrol et
-                                    file_inputs = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                                    for fi in file_inputs:
-                                        try:
-                                            fi.send_keys(absolute_path)
-                                            uploaded = True
-                                            logger.info("✅ Yöntem 2: + butonu sonrası file input başarılı")
-                                            time.sleep(2)
-                                            break
-                                        except:
-                                            continue
-                                    if uploaded:
-                                        break
-                            if uploaded:
-                                break
-                        except:
+                            fi.send_keys(absolute_path)
+                            uploaded = True
+                            logger.info("✅ Yöntem 2: Gizli file input ile upload başarılı")
+                            time.sleep(3)
+                            break
+                        except Exception as e:
+                            logger.debug(f"File input hatası: {e}")
                             continue
                 except Exception as e:
-                    logger.debug(f"+ butonu denemesi: {e}")
+                    logger.debug(f"File input denemesi: {e}")
 
-            # ===== YÖNTEM 3: Drag & Drop simülasyonu =====
+            # ===== YÖNTEM 3: JavaScript ile file input oluştur =====
             if not uploaded:
                 try:
-                    # Input alanını bul
-                    input_area = self._find_input_element()
-                    if input_area:
-                        # JavaScript ile dosya input'u oluştur ve tetikle
-                        self.driver.execute_script("""
-                            var input = document.createElement('input');
-                            input.type = 'file';
-                            input.id = 'temp-file-input-gemini';
-                            input.style.cssText = 'position:fixed; top:0; left:0; z-index:99999;';
-                            document.body.appendChild(input);
-                        """)
-                        time.sleep(0.5)
+                    logger.info("Yöntem 3: JavaScript file input oluşturuluyor...")
 
-                        temp_input = self.driver.find_element(By.ID, 'temp-file-input-gemini')
-                        temp_input.send_keys(absolute_path)
+                    # Dosyayı base64'e çevir
+                    import base64
+                    with open(absolute_path, 'rb') as f:
+                        file_data = base64.b64encode(f.read()).decode('utf-8')
 
-                        # DataTransfer ile drop eventi simüle et
-                        self.driver.execute_script("""
-                            var input = document.getElementById('temp-file-input-gemini');
-                            var file = input.files[0];
-                            if (file) {
-                                var dataTransfer = new DataTransfer();
-                                dataTransfer.items.add(file);
+                    file_name = os.path.basename(absolute_path)
+                    file_ext = file_name.split('.')[-1].lower()
+                    mime_type = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp'}.get(file_ext, 'image/png')
 
-                                var dropTarget = arguments[0];
-                                var dropEvent = new DragEvent('drop', {
-                                    bubbles: true,
-                                    cancelable: true,
-                                    dataTransfer: dataTransfer
-                                });
-                                dropTarget.dispatchEvent(dropEvent);
-                            }
-                            input.remove();
-                        """, input_area)
+                    # JavaScript ile file input oluştur ve tetikle
+                    js_result = self.driver.execute_script(f"""
+                        // Base64'ten Blob oluştur
+                        var base64 = '{file_data}';
+                        var byteCharacters = atob(base64);
+                        var byteNumbers = new Array(byteCharacters.length);
+                        for (var i = 0; i < byteCharacters.length; i++) {{
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }}
+                        var byteArray = new Uint8Array(byteNumbers);
+                        var blob = new Blob([byteArray], {{type: '{mime_type}'}});
 
-                        time.sleep(2)
+                        // File nesnesi oluştur
+                        var file = new File([blob], '{file_name}', {{type: '{mime_type}'}});
+
+                        // Mevcut file input'u bul veya oluştur
+                        var fileInput = document.querySelector('input[type="file"]');
+                        if (!fileInput) {{
+                            fileInput = document.createElement('input');
+                            fileInput.type = 'file';
+                            fileInput.style.display = 'none';
+                            document.body.appendChild(fileInput);
+                        }}
+
+                        // DataTransfer kullanarak dosyayı ayarla
+                        var dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        fileInput.files = dataTransfer.files;
+
+                        // Change eventi tetikle
+                        var changeEvent = new Event('change', {{bubbles: true}});
+                        fileInput.dispatchEvent(changeEvent);
+
+                        return 'ok';
+                    """)
+
+                    if js_result == 'ok':
+                        time.sleep(3)
                         # Upload başarılı mı kontrol et
-                        uploaded = True
-                        logger.info("Yöntem 3: Drag & drop simülasyonu ile upload denendi")
+                        if self._check_image_uploaded():
+                            uploaded = True
+                            logger.info("✅ Yöntem 3: JavaScript file input ile upload başarılı")
+                        else:
+                            logger.warning("Yöntem 3: File input tetiklendi ama görsel görünmüyor")
                 except Exception as e:
-                    logger.debug(f"Drag & drop denemesi: {e}")
+                    logger.debug(f"JavaScript file input denemesi: {e}")
 
             # ===== YÖNTEM 4: Clipboard yapıştırma (macOS) =====
             if not uploaded:
@@ -495,28 +595,34 @@ class GeminiProAccount:
                     logger.info("Yöntem 4: Clipboard yapıştırma deneniyor...")
                     import subprocess
 
-                    # PNG olarak clipboard'a kopyala (JPEG yerine PNG daha iyi sonuç verebilir)
-                    result = subprocess.run(['osascript', '-e',
-                        f'set the clipboard to (read (POSIX file "{absolute_path}") as «class PNGf»)'],
-                        capture_output=True, timeout=5)
+                    # Görseli clipboard'a kopyala
+                    # osascript ile TIFF/PNG olarak kopyala
+                    copy_result = subprocess.run([
+                        'osascript', '-e',
+                        f'set the clipboard to (read (POSIX file "{absolute_path}") as TIFF picture)'
+                    ], capture_output=True, timeout=10)
 
-                    if result.returncode != 0:
-                        # JPEG dene
-                        subprocess.run(['osascript', '-e',
-                            f'set the clipboard to (read (POSIX file "{absolute_path}") as JPEG picture)'],
-                            capture_output=True, timeout=5)
+                    if copy_result.returncode != 0:
+                        logger.warning(f"Clipboard kopyalama hatası: {copy_result.stderr.decode()}")
 
-                    # Input alanına yapıştır
+                    # Input alanına tıkla ve yapıştır
                     input_area = self._find_input_element()
                     if input_area:
                         input_area.click()
                         time.sleep(0.5)
-                        # Cmd+V
-                        from selenium.webdriver.common.keys import Keys
-                        input_area.send_keys(Keys.COMMAND, 'v')
-                        time.sleep(2)
-                        uploaded = True
-                        logger.info("✅ Yöntem 4: Clipboard yapıştırma denendi")
+
+                        # Cmd+V ile yapıştır
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.driver)
+                        actions.key_down(Keys.COMMAND).send_keys('v').key_up(Keys.COMMAND).perform()
+                        time.sleep(3)
+
+                        # Upload başarılı mı kontrol et
+                        if self._check_image_uploaded():
+                            uploaded = True
+                            logger.info("✅ Yöntem 4: Clipboard yapıştırma başarılı")
+                        else:
+                            logger.warning("Yöntem 4: Yapıştırıldı ama görsel görünmüyor")
                 except Exception as e:
                     logger.debug(f"Clipboard denemesi: {e}")
 
