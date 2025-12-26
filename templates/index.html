@@ -684,7 +684,18 @@ style: "friendly"
                 <button class="btn-warning" onclick="regenerateSelected()">Secilenleri Olustur</button>
                 <button class="btn-primary" onclick="renderFinalVideo()">Render</button>
                 <button class="btn-purple" onclick="generateVoice()">Ses Olustur</button>
-                <button class="btn-danger" onclick="completeProject('${d.project_name}')">Eksikleri Tamamla</button>
+            </div>`;
+
+            // Eksikleri Tamamla - Ayrı Bölüm
+            html += `<div style="margin-top:1rem;padding:1rem;background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:8px;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+                <span style="color:#fafafa;font-weight:600;">Eksikleri Tamamla:</span>
+                <select id="completeAccountSelect" style="padding:0.5rem 1rem;border-radius:4px;border:1px solid #ef4444;background:#27272a;color:#fafafa;font-size:0.9rem;">
+                    <option value="auto">Otomatik (Gemini + Grok)</option>
+                    <option value="1">Gemini Pro Hesap 1</option>
+                    <option value="2">Gemini Pro Hesap 2</option>
+                    <option value="3">Gemini Pro Hesap 3</option>
+                </select>
+                <button class="btn-danger" onclick="completeProject('${d.project_name}')" style="padding:0.5rem 1.5rem;">Baslat</button>
             </div>`;
 
             // Images Section
@@ -863,7 +874,38 @@ style: "friendly"
                 await saveAllPrompts();
             }
 
-            addLog(`${name} tamamlaniyor...`, 'info');
+            // Hesap seçimini al - dropdown varsa oradan, yoksa kullanıcıya sor
+            let selectedAccount = 'auto';
+            const selectEl = document.getElementById('completeAccountSelect');
+
+            if (selectEl) {
+                selectedAccount = selectEl.value;
+            } else {
+                // Modal açık değil, kullanıcıya sor
+                const choice = prompt(
+                    'Hangi mod kullanılsın?\n\n' +
+                    '0 = Otomatik (Gemini + Grok)\n' +
+                    '1 = Gemini Pro Hesap 1\n' +
+                    '2 = Gemini Pro Hesap 2\n' +
+                    '3 = Gemini Pro Hesap 3\n\n' +
+                    'Seçiminiz (0-3):',
+                    '0'
+                );
+
+                if (choice === null) return; // İptal
+
+                if (choice === '0') {
+                    selectedAccount = 'auto';
+                } else if (['1', '2', '3'].includes(choice)) {
+                    selectedAccount = choice;
+                } else {
+                    addLog('Geçersiz seçim, otomatik mod kullanılacak', 'warning');
+                    selectedAccount = 'auto';
+                }
+            }
+
+            console.log('Final selectedAccount:', selectedAccount);
+            addLog(`${name} tamamlaniyor... (${selectedAccount === 'auto' ? 'Gemini+Grok' : 'Gemini Pro Hesap ' + selectedAccount})`, 'info');
 
             // Promptları topla
             const imagePrompts = {};
@@ -886,7 +928,8 @@ style: "friendly"
                 body: JSON.stringify({
                     image_prompts: imagePrompts,
                     video_prompts: videoPrompts,
-                    voice_text: document.getElementById('voice-text')?.value || ''
+                    voice_text: document.getElementById('voice-text')?.value || '',
+                    selected_account: selectedAccount
                 })
             });
             const data = await res.json();
@@ -1470,13 +1513,21 @@ style: "friendly"
                 `;
 
                 // Aksiyon butonları
-                html += `<div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">`;
+                html += `<div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">`;
                 if (pj) {
                     const failedCount = Object.values(pj.status || {}).filter(s => s !== 'completed').length;
                     if (failedCount > 0) {
-                        html += `<button class="btn-sm btn-primary" onclick="retryFailedGemini('${projectName}')">Eksikleri Tamamla (${failedCount})</button>`;
+                        html += `
+                            <select id="geminiRetryAccountSelect" style="padding:0.4rem 0.8rem;border-radius:4px;border:1px solid #3b82f6;background:#27272a;color:#fafafa;font-size:0.85rem;">
+                                <option value="1">Hesap 1</option>
+                                <option value="2">Hesap 2</option>
+                                <option value="3">Hesap 3</option>
+                            </select>
+                            <button class="btn-sm btn-primary" onclick="retryFailedGemini('${projectName}')">Eksikleri Tamamla (${failedCount})</button>
+                        `;
                     }
                 }
+                html += `<button class="btn-sm btn-success" onclick="cleanWatermarksLama('${projectName}')" style="background:#059669;border-color:#059669">🧹 LaMa Watermark Temizle</button>`;
                 html += `<button class="btn-sm btn-secondary" onclick="renderGeminiProject('${projectName}')">Yeniden Render</button>`;
                 html += `</div>`;
 
@@ -1695,13 +1746,20 @@ style: "friendly"
 
         // Başarısız olanları yeniden dene
         async function retryFailedGemini(projectName) {
-            if (!confirm('Eksik/basarisiz ogeleri yeniden olusturmak istiyor musunuz?')) return;
+            // Hesap seçimini al
+            const selectEl = document.getElementById('geminiRetryAccountSelect');
+            const selectedAccount = selectEl ? selectEl.value : '1';
+
+            if (!confirm(`Hesap ${selectedAccount} ile eksik/basarisiz ogeleri yeniden olusturmak istiyor musunuz?`)) return;
 
             try {
                 const res = await fetch('/api/gemini-pro/retry-failed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ project_name: projectName })
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        selected_account: selectedAccount
+                    })
                 });
                 const data = await res.json();
 
@@ -1719,7 +1777,11 @@ style: "friendly"
 
         // Belirli bir indeksi yeniden dene
         async function retryGeminiIndex(projectName, index) {
-            if (!confirm(`#${index} yeniden olusturulsun mu?`)) return;
+            // Hesap seçimini al
+            const selectEl = document.getElementById('geminiRetryAccountSelect');
+            const selectedAccount = selectEl ? selectEl.value : '1';
+
+            if (!confirm(`Hesap ${selectedAccount} ile #${index} yeniden olusturulsun mu?`)) return;
 
             try {
                 const res = await fetch('/api/gemini-pro/retry-failed', {
@@ -1727,7 +1789,8 @@ style: "friendly"
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_name: projectName,
-                        indices: [index]
+                        indices: [index],
+                        selected_account: selectedAccount
                     })
                 });
                 const data = await res.json();
@@ -1750,6 +1813,30 @@ style: "friendly"
 
             try {
                 const res = await fetch('/api/gemini-pro/render-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeModal();
+                    document.getElementById('geminiProProgress').style.display = 'block';
+                    startGeminiProPolling();
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch(e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // LaMa ile watermark temizle
+        async function cleanWatermarksLama(projectName) {
+            if (!confirm('Tüm videoların watermarklarını LaMa deep learning ile temizlemek istiyor musunuz? Bu işlem birkaç dakika sürebilir.')) return;
+
+            try {
+                const res = await fetch('/api/gemini-pro/clean-watermarks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ project_name: projectName })

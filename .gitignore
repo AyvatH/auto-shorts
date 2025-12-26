@@ -43,3 +43,4 @@ backups/
 
 # Claude
 .claude/
+models/

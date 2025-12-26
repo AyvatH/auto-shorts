@@ -280,6 +280,12 @@ def complete_project(project_name):
     image_prompts = data.get("image_prompts", {})  # {2: "prompt for image 2", ...}
     video_prompts = data.get("video_prompts", {})  # {2: "prompt for video 2", ...}
     voice_text = data.get("voice_text", "")
+    selected_account = data.get("selected_account", "auto")  # Gemini Pro hesap seçimi
+
+    logger.info(f"=== COMPLETE PROJECT DEBUG ===")
+    logger.info(f"Project: {project_name}")
+    logger.info(f"Selected account: '{selected_account}'")
+    logger.info(f"Data received: {data.keys()}")
 
     def run_completion():
         global current_task
@@ -291,7 +297,8 @@ def complete_project(project_name):
                 image_prompts=image_prompts,
                 video_prompts=video_prompts,
                 voice_text=voice_text,
-                progress_callback=update_progress
+                progress_callback=update_progress,
+                selected_account=selected_account
             )
 
             with task_lock:
@@ -877,34 +884,65 @@ def gemini_pro_daily_shorts():
 
             # OTOMATİK KURULUM: Tarayıcılar açık değilse aç
             update_progress("Hesaplar kontrol ediliyor...", 5)
-            needs_setup = False
-            for acc in gemini_pro_manager.accounts:
-                if not acc.is_browser_alive():
-                    needs_setup = True
-                    break
 
-            if needs_setup:
-                logger.info("Tarayıcılar kapalı - otomatik kurulum yapılıyor...")
-                update_progress("Tarayıcılar açılıyor...", 10)
-                gemini_pro_manager.setup_accounts()
-                time.sleep(3)
+            if selected_account != "auto":
+                # Sadece seçilen hesabın tarayıcısını aç
+                account_id = int(selected_account)
+                acc = gemini_pro_manager.get_account_by_id(account_id)
+                if acc and not acc.is_browser_alive():
+                    logger.info(f"Hesap {account_id} tarayıcısı açılıyor...")
+                    update_progress(f"Hesap {account_id} açılıyor...", 10)
+                    acc.start_browser()
+                    acc.driver.get("https://gemini.google.com")
+                    time.sleep(3)
+            else:
+                # Otomatik mod - tüm hesapları kontrol et
+                needs_setup = False
+                for acc in gemini_pro_manager.accounts:
+                    if not acc.is_browser_alive():
+                        needs_setup = True
+                        break
+
+                if needs_setup:
+                    logger.info("Tarayıcılar kapalı - otomatik kurulum yapılıyor...")
+                    update_progress("Tarayıcılar açılıyor...", 10)
+                    gemini_pro_manager.setup_accounts()
+                    time.sleep(3)
 
             # OTOMATİK DOĞRULAMA: Giriş durumunu kontrol et
             update_progress("Giriş durumu kontrol ediliyor...", 15)
-            verify_result = gemini_pro_manager.verify_all_accounts()
 
-            if not verify_result.get("all_logged_in"):
-                # Giriş yapılmamış hesaplar var - kullanıcıya bilgi ver ve bekle
-                not_logged = [a for a in verify_result["accounts"] if not a.get("logged_in")]
-                logger.warning(f"Giriş yapılmamış hesaplar: {[a['account_id'] for a in not_logged]}")
-                update_progress(f"⚠️ {len(not_logged)} hesaba giriş yapın, 30 saniye bekleniyor...", 20)
-
-                # 30 saniye bekle ve tekrar kontrol et
-                time.sleep(30)
+            if selected_account != "auto":
+                # Sadece seçilen hesabı doğrula
+                account_id = int(selected_account)
+                acc = gemini_pro_manager.get_account_by_id(account_id)
+                if acc and acc.driver:
+                    try:
+                        current_url = acc.driver.current_url
+                        is_logged_in = "gemini.google.com" in current_url and "accounts.google" not in current_url
+                        if not is_logged_in:
+                            update_progress(f"⚠️ Hesap {account_id}'e giriş yapın, 30 saniye bekleniyor...", 20)
+                            time.sleep(30)
+                            current_url = acc.driver.current_url
+                            is_logged_in = "gemini.google.com" in current_url and "accounts.google" not in current_url
+                            if not is_logged_in:
+                                raise Exception(f"Hesap {account_id}'e giriş yapılmadı.")
+                    except Exception as e:
+                        raise Exception(f"Hesap {account_id} kontrolü başarısız: {e}")
+            else:
+                # Otomatik mod - tüm hesapları doğrula
                 verify_result = gemini_pro_manager.verify_all_accounts()
 
                 if not verify_result.get("all_logged_in"):
-                    raise Exception("Hesaplara giriş yapılmadı. Lütfen Google hesaplarına giriş yapın.")
+                    not_logged = [a for a in verify_result["accounts"] if not a.get("logged_in")]
+                    logger.warning(f"Giriş yapılmamış hesaplar: {[a['account_id'] for a in not_logged]}")
+                    update_progress(f"⚠️ {len(not_logged)} hesaba giriş yapın, 30 saniye bekleniyor...", 20)
+
+                    time.sleep(30)
+                    verify_result = gemini_pro_manager.verify_all_accounts()
+
+                    if not verify_result.get("all_logged_in"):
+                        raise Exception("Hesaplara giriş yapılmadı. Lütfen Google hesaplarına giriş yapın.")
 
             logger.info("Tüm hesaplar hazır!")
             update_progress("Tüm hesaplar hazır, proje başlıyor...", 25)
@@ -1129,6 +1167,10 @@ def gemini_pro_retry_failed():
         data = request.get_json()
         project_name = data.get("project_name")
         indices = data.get("indices")  # Belirli indeksler veya None (tümü)
+        selected_account = data.get("selected_account", "auto")  # Hesap seçimi
+
+        logger.info(f"=== GEMINI PRO RETRY DEBUG ===")
+        logger.info(f"Project: {project_name}, Selected account: '{selected_account}'")
 
         if not project_name:
             return jsonify({"error": "project_name gerekli"}), 400
@@ -1159,7 +1201,7 @@ def gemini_pro_retry_failed():
                     gemini_pro_manager.progress_callback = update_progress
 
                 shorts_mode = DailyShortsMode(gemini_pro_manager)
-                result = shorts_mode.retry_failed(project_dir, indices)
+                result = shorts_mode.retry_failed(project_dir, indices, selected_account=selected_account)
 
                 with task_lock:
                     current_task["result"] = result
@@ -1352,6 +1394,100 @@ def gemini_pro_create_thumbnail():
         thread.start()
 
         return jsonify({"success": True, "message": "Thumbnail oluşturma başlatıldı"})
+
+    except Exception as e:
+        with task_lock:
+            current_task["running"] = False
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gemini-pro/clean-watermarks", methods=["POST"])
+def gemini_pro_clean_watermarks():
+    """Projedeki tüm videoların watermark'larını LaMa ile temizle"""
+    global current_task
+
+    try:
+        data = request.get_json()
+        project_name = data.get("project_name")
+
+        if not project_name:
+            return jsonify({"error": "project_name gerekli"}), 400
+
+        projects_dir = os.path.join(config.BASE_DIR, "gemini_pro_projects")
+        project_dir = os.path.join(projects_dir, project_name)
+
+        if not os.path.exists(project_dir):
+            return jsonify({"error": "Proje bulunamadı"}), 404
+
+        with task_lock:
+            if current_task["running"]:
+                return jsonify({"error": "Başka bir işlem devam ediyor"}), 400
+            current_task["running"] = True
+            current_task["type"] = "watermark_clean"
+            current_task["progress"] = 0
+            current_task["message"] = "LaMa watermark temizleme başlıyor..."
+            current_task["error"] = None
+
+        def run_clean():
+            global current_task
+            try:
+                from lama_video_inpaint import remove_video_watermark_lama
+
+                # Video dosyalarını bul
+                video_files = sorted([f for f in os.listdir(project_dir)
+                                     if f.startswith("video_") and f.endswith(".mp4")
+                                     and "_lama" not in f and "_telea" not in f])
+
+                if not video_files:
+                    with task_lock:
+                        current_task["error"] = "Video bulunamadı"
+                        current_task["running"] = False
+                    return
+
+                total = len(video_files)
+                cleaned = 0
+
+                for idx, video_file in enumerate(video_files):
+                    video_path = os.path.join(project_dir, video_file)
+                    # video_1.mp4 -> video_1_cleaned.mp4
+                    cleaned_path = os.path.join(project_dir, video_file.replace(".mp4", "_cleaned.mp4"))
+
+                    with task_lock:
+                        current_task["progress"] = int((idx / total) * 100)
+                        current_task["message"] = f"[{idx+1}/{total}] {video_file} temizleniyor..."
+
+                    logger.info(f"LaMa temizleme: {video_file}")
+
+                    success = remove_video_watermark_lama(video_path, cleaned_path)
+                    if success:
+                        cleaned += 1
+                        logger.info(f"Temizlendi: {video_file}")
+                    else:
+                        logger.warning(f"Temizlenemedi: {video_file}")
+
+                with task_lock:
+                    current_task["progress"] = 100
+                    current_task["message"] = f"Tamamlandı: {cleaned}/{total} video temizlendi"
+                    current_task["result"] = {
+                        "cleaned": cleaned,
+                        "total": total,
+                        "project_name": project_name
+                    }
+                    current_task["running"] = False
+
+            except Exception as e:
+                logger.error(f"Watermark temizleme hatası: {e}")
+                import traceback
+                traceback.print_exc()
+                with task_lock:
+                    current_task["error"] = str(e)
+                    current_task["running"] = False
+
+        import threading
+        thread = threading.Thread(target=run_clean)
+        thread.start()
+
+        return jsonify({"success": True, "message": "LaMa watermark temizleme başlatıldı"})
 
     except Exception as e:
         with task_lock:
