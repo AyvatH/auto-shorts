@@ -51,7 +51,7 @@ class GeminiProAccount:
         self.wait = None
         self.daily_usage = 0
         self.last_usage_date = None
-        self.download_dir = os.path.join(profile_dir, "downloads")
+        self.download_dir = os.path.join(profile_dir, "Downloads")
         self.progress_callback = progress_callback or (lambda msg, pct: logger.info(f"[{pct}%] {msg}"))
 
         os.makedirs(self.download_dir, exist_ok=True)
@@ -695,11 +695,13 @@ class GeminiProAccount:
             img_src = latest_image.get_attribute('src') or ""
             logger.info(f"Görsel src: {img_src[:100]}...")
 
-            # İndirme öncesi dosyaları kaydet
-            downloads_dir = os.path.expanduser("~/Downloads")
+            # İndirme öncesi dosyaları kaydet - Chrome profil Downloads klasörünü kullan
+            downloads_dir = self.download_dir
+            logger.info(f"Downloads klasörü: {downloads_dir}")
             files_before = set()
             for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
                 files_before.update(glob.glob(os.path.join(downloads_dir, ext)))
+            logger.info(f"Önceki dosya sayısı: {len(files_before)}")
 
             # ===== YÖNTEM 1: Canvas ile blob/data URL'den tam çözünürlük görsel çıkar =====
             try:
