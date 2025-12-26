@@ -805,45 +805,59 @@ class GeminiProAccount:
             except Exception as e:
                 logger.warning(f"İndirme butonu yöntemi başarısız: {e}")
 
-            # ===== YÖNTEM 3: HTTP(S) URL'den doğrudan indir =====
-            if not download_clicked and img_src.startswith('http'):
+            # ===== YÖNTEM 3: Downloads klasöründe yeni dosya bekle (buton tıklandıysa) =====
+            if download_clicked:
+                logger.info("Yöntem 3: Downloads klasörü kontrol ediliyor...")
+                # Birkaç saniye bekle ve kontrol et
+                for wait_sec in range(8):
+                    time.sleep(1)
+                    files_after = set()
+                    for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                        files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
+
+                    new_files = files_after - files_before
+                    if new_files:
+                        newest = max(new_files, key=os.path.getmtime)
+                        if os.path.getsize(newest) > 10000:
+                            shutil.move(newest, save_path)
+                            logger.info(f"✅ Downloads'dan taşındı: {save_path}")
+                            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                            return save_path
+                        logger.info(f"Yeni dosya bulundu ama çok küçük: {os.path.getsize(newest)} bytes, bekleniyor...")
+
+            # ===== YÖNTEM 4: HTTP(S) URL'den doğrudan indir =====
+            if img_src.startswith('http'):
                 try:
-                    logger.info("Yöntem 3: HTTP URL'den indiriliyor...")
+                    logger.info("Yöntem 4: HTTP URL'den indiriliyor...")
                     import urllib.request
 
-                    # Headers ekle (Gemini URL'leri için gerekli olabilir)
-                    opener = urllib.request.build_opener()
-                    opener.addheaders = [
-                        ('User-Agent', 'Mozilla/5.0'),
-                        ('Referer', 'https://gemini.google.com/')
-                    ]
-                    urllib.request.install_opener(opener)
+                    # Gemini URL'leri için cookies/headers gerekebilir
+                    # Selenium'dan cookies al
+                    cookies = self.driver.get_cookies()
+                    cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
 
-                    urllib.request.urlretrieve(img_src, save_path)
+                    req = urllib.request.Request(img_src)
+                    req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
+                    req.add_header('Referer', 'https://gemini.google.com/')
+                    req.add_header('Cookie', cookie_str)
+
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        with open(save_path, 'wb') as f:
+                            f.write(response.read())
+
                     if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
                         logger.info(f"✅ URL'den indirildi: {save_path}")
                         self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
                         return save_path
+                    else:
+                        logger.warning(f"URL indirme dosya çok küçük: {os.path.getsize(save_path) if os.path.exists(save_path) else 0}")
                 except Exception as e:
                     logger.warning(f"URL indirme başarısız: {e}")
 
-            # ===== YÖNTEM 4: Fetch API ile blob URL'yi çöz =====
+            # ===== YÖNTEM 5: Fetch API ile blob URL'yi çöz =====
             if img_src.startswith('blob:'):
                 try:
-                    logger.info("Yöntem 4: Fetch API ile blob çözülüyor...")
-                    fetch_script = """
-                    var url = arguments[0];
-                    return fetch(url)
-                        .then(response => response.blob())
-                        .then(blob => {
-                            return new Promise((resolve, reject) => {
-                                var reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.onerror = reject;
-                                reader.readAsDataURL(blob);
-                            });
-                        });
-                    """
+                    logger.info("Yöntem 5: Fetch API ile blob çözülüyor...")
                     # Async script çalıştır
                     data_url = self.driver.execute_async_script(f"""
                     var callback = arguments[arguments.length - 1];
@@ -872,21 +886,27 @@ class GeminiProAccount:
                 except Exception as e:
                     logger.warning(f"Fetch API yöntemi başarısız: {e}")
 
-            # ===== YÖNTEM 5: Downloads klasöründe yeni dosya kontrol et =====
-            time.sleep(3)
-            files_after = set()
-            for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
-                files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
+            # ===== YÖNTEM 6: Son kontrol - Downloads klasöründe bekle =====
+            if not os.path.exists(save_path):
+                logger.info("Yöntem 6: Son Downloads kontrolü...")
+                for _ in range(5):
+                    time.sleep(1)
+                    files_after = set()
+                    for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                        files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
 
-            new_files = files_after - files_before
-            if new_files:
-                newest = max(new_files, key=os.path.getmtime)
-                # Dosya boyutunu kontrol et
-                if os.path.getsize(newest) > 10000:
-                    shutil.move(newest, save_path)
-                    logger.info(f"✅ Downloads'dan taşındı: {save_path}")
-                    self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
-                    return save_path
+                    new_files = files_after - files_before
+                    if new_files:
+                        newest = max(new_files, key=os.path.getmtime)
+                        if os.path.getsize(newest) > 10000:
+                            shutil.move(newest, save_path)
+                            logger.info(f"✅ Downloads'dan taşındı: {save_path}")
+                            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                            return save_path
+
+            # Dosya başarıyla oluşturulduysa dön
+            if os.path.exists(save_path) and os.path.getsize(save_path) > 10000:
+                return save_path
 
             # ===== SCREENSHOT ALMIYORUZ - gerçek indirme başarısız olduysa None dön =====
             logger.error("❌ GÖRSEL İNDİRİLEMEDİ - Tüm yöntemler başarısız!")
