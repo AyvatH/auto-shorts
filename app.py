@@ -3,6 +3,7 @@ Auto Shorts Image Generator - Flask Web Application
 """
 import os
 import json
+import time
 import logging
 import threading
 from datetime import datetime
@@ -855,16 +856,46 @@ def gemini_pro_daily_shorts():
             logger.info("=== run_shorts thread başladı ===")
             from gemini_pro_manager import GeminiProManager, DailyShortsMode
 
+            # Manager oluştur veya mevcut olanı kullan
             if not gemini_pro_manager:
                 logger.info("gemini_pro_manager None - yeni oluşturuluyor")
                 gemini_pro_manager = GeminiProManager(progress_callback=update_progress)
             else:
-                logger.info(f"gemini_pro_manager mevcut - hesap sayısı: {len(gemini_pro_manager.accounts)}")
-                # Her hesabın driver durumunu logla
-                for acc in gemini_pro_manager.accounts:
-                    logger.info(f"  Hesap {acc.account_id}: driver={acc.driver is not None}, alive={acc.is_browser_alive()}")
-                # Progress callback'i güncelle
                 gemini_pro_manager.progress_callback = update_progress
+
+            # OTOMATİK KURULUM: Tarayıcılar açık değilse aç
+            update_progress("Hesaplar kontrol ediliyor...", 5)
+            needs_setup = False
+            for acc in gemini_pro_manager.accounts:
+                if not acc.is_browser_alive():
+                    needs_setup = True
+                    break
+
+            if needs_setup:
+                logger.info("Tarayıcılar kapalı - otomatik kurulum yapılıyor...")
+                update_progress("Tarayıcılar açılıyor...", 10)
+                gemini_pro_manager.setup_accounts()
+                time.sleep(3)
+
+            # OTOMATİK DOĞRULAMA: Giriş durumunu kontrol et
+            update_progress("Giriş durumu kontrol ediliyor...", 15)
+            verify_result = gemini_pro_manager.verify_all_accounts()
+
+            if not verify_result.get("all_logged_in"):
+                # Giriş yapılmamış hesaplar var - kullanıcıya bilgi ver ve bekle
+                not_logged = [a for a in verify_result["accounts"] if not a.get("logged_in")]
+                logger.warning(f"Giriş yapılmamış hesaplar: {[a['account_id'] for a in not_logged]}")
+                update_progress(f"⚠️ {len(not_logged)} hesaba giriş yapın, 30 saniye bekleniyor...", 20)
+
+                # 30 saniye bekle ve tekrar kontrol et
+                time.sleep(30)
+                verify_result = gemini_pro_manager.verify_all_accounts()
+
+                if not verify_result.get("all_logged_in"):
+                    raise Exception("Hesaplara giriş yapılmadı. Lütfen Google hesaplarına giriş yapın.")
+
+            logger.info("Tüm hesaplar hazır!")
+            update_progress("Tüm hesaplar hazır, proje başlıyor...", 25)
 
             logger.info(f"DailyShortsMode oluşturuluyor, prompts={len(prompts)}")
             shorts_mode = DailyShortsMode(gemini_pro_manager)

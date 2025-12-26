@@ -570,7 +570,7 @@ class GeminiProAccount:
             return False
 
     def download_latest_image(self, save_path: str) -> Optional[str]:
-        """En son oluşturulan görseli indir"""
+        """En son oluşturulan görseli indir - Gerçek indirme"""
         try:
             self._update_progress("Görsel indiriliyor...", 55)
 
@@ -582,14 +582,111 @@ class GeminiProAccount:
             # En son görseli al
             latest_image = images[-1]
 
-            # Screenshot olarak kaydet (en güvenilir yöntem)
-            latest_image.screenshot(save_path)
-            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+            # İndirme öncesi dosyaları kaydet
+            downloads_dir = os.path.expanduser("~/Downloads")
+            files_before = set()
+            for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                files_before.update(glob.glob(os.path.join(downloads_dir, ext)))
 
+            # YÖNTEM 1: Görselin üzerine gelip indirme butonunu bul
+            download_clicked = False
+            try:
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(self.driver)
+                actions.move_to_element(latest_image).perform()
+                time.sleep(1)
+
+                download_selectors = [
+                    'button[data-test-id="download-generated-image-button"]',
+                    'button[aria-label*="download" i]',
+                    'button[aria-label*="Download" i]',
+                    'button[aria-label*="indir" i]',
+                    '[data-tooltip*="download" i]',
+                    'button.download-button',
+                ]
+
+                for selector in download_selectors:
+                    try:
+                        btns = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for btn in btns:
+                            if btn.is_displayed():
+                                btn.click()
+                                download_clicked = True
+                                logger.info(f"İndirme butonu tıklandı: {selector}")
+                                time.sleep(3)
+                                break
+                        if download_clicked:
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                logger.warning(f"Hover/click yöntemi başarısız: {e}")
+
+            # YÖNTEM 2: Sağ tık menüsünden indir
+            if not download_clicked:
+                try:
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    actions = ActionChains(self.driver)
+                    actions.context_click(latest_image).perform()
+                    time.sleep(0.5)
+
+                    # "Save image as" seç
+                    save_items = self.driver.find_elements(By.CSS_SELECTOR,
+                        '[role="menuitem"], [data-testid*="save"], [data-testid*="download"]')
+                    for item in save_items:
+                        text = item.text.lower()
+                        if 'save' in text or 'download' in text or 'kaydet' in text or 'indir' in text:
+                            item.click()
+                            download_clicked = True
+                            logger.info("Sağ tık menüsünden indirme seçildi")
+                            time.sleep(3)
+                            break
+
+                    # Menüyü kapat
+                    if not download_clicked:
+                        self.driver.find_element(By.TAG_NAME, 'body').click()
+                except Exception as e:
+                    logger.warning(f"Sağ tık yöntemi başarısız: {e}")
+
+            # YÖNTEM 3: JavaScript ile src URL'den indir
+            if not download_clicked:
+                try:
+                    img_src = latest_image.get_attribute('src')
+                    if img_src and img_src.startswith('http'):
+                        import urllib.request
+                        urllib.request.urlretrieve(img_src, save_path)
+                        if os.path.exists(save_path) and os.path.getsize(save_path) > 1000:
+                            logger.info(f"URL'den indirildi: {save_path}")
+                            self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                            return save_path
+                except Exception as e:
+                    logger.warning(f"URL indirme başarısız: {e}")
+
+            # İndirilen dosyayı bul
+            time.sleep(3)
+            files_after = set()
+            for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
+                files_after.update(glob.glob(os.path.join(downloads_dir, ext)))
+
+            new_files = files_after - files_before
+            if new_files:
+                # En yeni dosyayı al
+                newest = max(new_files, key=os.path.getmtime)
+                shutil.move(newest, save_path)
+                logger.info(f"Görsel indirildi ve taşındı: {save_path}")
+                self._update_progress(f"Görsel kaydedildi: {os.path.basename(save_path)}", 60)
+                return save_path
+
+            # YÖNTEM 4: Fallback - Screenshot (son çare)
+            logger.warning("İndirme başarısız, screenshot alınıyor...")
+            latest_image.screenshot(save_path)
+            self._update_progress(f"Görsel kaydedildi (screenshot): {os.path.basename(save_path)}", 60)
             return save_path
 
         except Exception as e:
             logger.error(f"Görsel indirme hatası: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _find_generated_videos(self) -> List:
