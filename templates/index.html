@@ -1668,11 +1668,14 @@ style: "friendly"
                 if (pj) {
                     const failedCount = Object.values(pj.status || {}).filter(s => s !== 'completed').length;
                     if (failedCount > 0) {
+                        const totalAccounts = geminiProConfig.total_accounts || 4;
+                        let accountOptions = '';
+                        for (let a = 1; a <= totalAccounts; a++) {
+                            accountOptions += `<option value="${a}">Hesap ${a}</option>`;
+                        }
                         html += `
                             <select id="geminiRetryAccountSelect" style="padding:0.4rem 0.8rem;border-radius:4px;border:1px solid #3b82f6;background:#27272a;color:#fafafa;font-size:0.85rem;">
-                                <option value="1">Hesap 1</option>
-                                <option value="2">Hesap 2</option>
-                                <option value="3">Hesap 3</option>
+                                ${accountOptions}
                             </select>
                             <button class="btn-sm btn-primary" onclick="retryFailedGemini('${projectName}')">Eksikleri Tamamla (${failedCount})</button>
                         `;
