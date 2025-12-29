@@ -25,6 +25,7 @@ current_task = {
     "error": None
 }
 task_lock = threading.Lock()
+gemini_pro_manager = None  # Global Gemini Pro Manager instance
 
 
 def update_progress(message: str, percentage: int):
@@ -33,6 +34,29 @@ def update_progress(message: str, percentage: int):
     with task_lock:
         current_task["message"] = message
         current_task["progress"] = percentage
+
+
+def force_stop_current_task():
+    """Mevcut işlemi zorla durdur ve tarayıcıları kapat"""
+    global current_task, gemini_pro_manager
+
+    with task_lock:
+        was_running = current_task["running"]
+        current_task["running"] = False
+        current_task["error"] = "Yeni işlem için durduruldu"
+
+    # Tarayıcıları kapat
+    if was_running and gemini_pro_manager:
+        try:
+            gemini_pro_manager.close_all()
+        except:
+            pass
+
+    # Kısa bir bekleme - thread'lerin temizlenmesi için
+    if was_running:
+        time.sleep(2)
+
+    return was_running
 
 
 @app.route("/")
@@ -732,9 +756,6 @@ def switch_gemini_account():
 
 # ==================== GEMINI PRO API ====================
 
-# Global Gemini Pro manager instance
-gemini_pro_manager = None
-
 
 @app.route("/api/gemini-pro/status")
 def gemini_pro_status():
@@ -955,10 +976,12 @@ def gemini_pro_daily_shorts():
     """Günlük shorts projesi başlat (9 video/gün)"""
     global gemini_pro_manager, current_task
 
-    with task_lock:
-        if current_task["running"]:
-            return jsonify({"error": "Bir işlem zaten devam ediyor"}), 400
+    # Mevcut işlemi otomatik durdur
+    if current_task["running"]:
+        logger.info("Mevcut işlem durduruluyor...")
+        force_stop_current_task()
 
+    with task_lock:
         current_task["running"] = True
         current_task["progress"] = 0
         current_task["message"] = "Günlük shorts başlıyor..."
@@ -1308,9 +1331,12 @@ def gemini_pro_retry_failed():
         if not os.path.exists(project_dir):
             return jsonify({"error": "Proje bulunamadı"}), 404
 
+        # Mevcut işlemi otomatik durdur
+        if current_task["running"]:
+            logger.info("Mevcut işlem durduruluyor...")
+            force_stop_current_task()
+
         with task_lock:
-            if current_task["running"]:
-                return jsonify({"error": "Başka bir işlem devam ediyor"}), 400
             current_task["running"] = True
             current_task["type"] = "gemini_pro_retry"
             current_task["progress"] = 0
