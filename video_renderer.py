@@ -295,19 +295,50 @@ class VideoRenderer:
             combined_video_path = os.path.join(self.output_dir, "combined_temp.mp4")
 
             clips = []
-            logger.info(f"Birleştirilecek videolar ({len(video_paths)} adet):")
+            # Hedef boyut: 9:16 (1080x1920 veya 720x1280)
+            target_width = 720
+            target_height = 1280
+
+            logger.info(f"Birleştirilecek videolar ({len(video_paths)} adet) - Hedef: {target_width}x{target_height}")
             for path in video_paths:
                 if os.path.exists(path):
                     clip = VideoFileClip(path)
+                    orig_w, orig_h = clip.size
+                    logger.info(f"  + {os.path.basename(path)}: {orig_w}x{orig_h}, {clip.duration:.2f}s")
+
+                    # Boyut farklıysa normalize et
+                    if orig_w != target_width or orig_h != target_height:
+                        # Aspect ratio hesapla
+                        orig_ratio = orig_w / orig_h
+                        target_ratio = target_width / target_height
+
+                        if abs(orig_ratio - target_ratio) > 0.1:
+                            # Yanlış aspect ratio - crop + scale
+                            if orig_ratio > target_ratio:
+                                # Video çok geniş (16:9), crop yap
+                                new_width = int(orig_h * target_ratio)
+                                x_center = orig_w / 2
+                                clip = clip.cropped(x1=x_center - new_width/2, x2=x_center + new_width/2)
+                                logger.info(f"    -> Yatay video, ortadan crop: {new_width}x{orig_h}")
+                            else:
+                                # Video çok dar, crop yap
+                                new_height = int(orig_w / target_ratio)
+                                y_center = orig_h / 2
+                                clip = clip.cropped(y1=y_center - new_height/2, y2=y_center + new_height/2)
+                                logger.info(f"    -> Dikey video, ortadan crop: {orig_w}x{new_height}")
+
+                        # Hedef boyuta resize
+                        clip = clip.resized((target_width, target_height))
+                        logger.info(f"    -> Resize: {target_width}x{target_height}")
+
                     clips.append(clip)
-                    logger.info(f"  + {os.path.basename(path)}: {clip.duration:.2f}s")
                 else:
                     logger.warning(f"  - Video bulunamadı: {path}")
 
             if not clips:
                 raise Exception("Birleştirilecek video bulunamadı")
 
-            # Videoları birleştir
+            # Videoları birleştir (artık hepsi aynı boyutta)
             video_clip = concatenate_videoclips(clips, method="compose")
             video_size = video_clip.size
             video_duration = video_clip.duration
