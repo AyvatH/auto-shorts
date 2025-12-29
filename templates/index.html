@@ -1907,6 +1907,31 @@ style: "friendly"
             if (!confirm(`Hesap ${selectedAccount} ile eksik/basarisiz ogeleri yeniden olusturmak istiyor musunuz?`)) return;
 
             try {
+                // Önce tüm düzenlenmiş promptları kaydet
+                const pj = currentGeminiProject?.project_json;
+                if (pj && pj.status) {
+                    for (const idx of Object.keys(pj.status)) {
+                        const status = pj.status[idx];
+                        if (status !== 'completed') {
+                            const imgEl = document.getElementById(`imgPrompt_${idx}`);
+                            const vidEl = document.getElementById(`vidPrompt_${idx}`);
+                            if (imgEl && vidEl) {
+                                await fetch('/api/gemini-pro/update-prompt', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        project_name: projectName,
+                                        index: parseInt(idx),
+                                        image_prompt: imgEl.value,
+                                        video_prompt: vidEl.value
+                                    })
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Şimdi retry yap
                 const res = await fetch('/api/gemini-pro/retry-failed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1938,6 +1963,28 @@ style: "friendly"
             if (!confirm(`Hesap ${selectedAccount} ile #${index} yeniden olusturulsun mu?`)) return;
 
             try {
+                // Önce textarea'daki güncel promptları kaydet
+                const imgPromptEl = document.getElementById(`imgPrompt_${index}`);
+                const vidPromptEl = document.getElementById(`vidPrompt_${index}`);
+
+                if (imgPromptEl && vidPromptEl) {
+                    const saveRes = await fetch('/api/gemini-pro/update-prompt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_name: projectName,
+                            index: index,
+                            image_prompt: imgPromptEl.value,
+                            video_prompt: vidPromptEl.value
+                        })
+                    });
+                    const saveData = await saveRes.json();
+                    if (!saveData.success) {
+                        console.warn('Prompt kaydetme hatası:', saveData.error);
+                    }
+                }
+
+                // Şimdi retry yap
                 const res = await fetch('/api/gemini-pro/retry-failed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
