@@ -80,6 +80,7 @@ TIMEOUTS = {
 MAX_RETRIES = 3
 
 # Image settings
+IMAGE_PREFIX = "Create a high quality image:"
 IMAGE_SUFFIX = "vertical 9:16 aspect ratio, portrait orientation, 1080x1920"
 WATERMARK_REMOVAL_PROMPT = "Remove all watermarks from this image naturally"
 

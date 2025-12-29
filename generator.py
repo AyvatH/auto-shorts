@@ -234,9 +234,9 @@ class GeminiImageGenerator:
     def send_prompt(self, prompt: str, add_image_suffix: bool = True) -> bool:
         """Prompt gönder"""
         try:
-            # Add image suffix if needed
+            # Add image prefix and suffix if needed
             if add_image_suffix:
-                full_prompt = f"{prompt}, {config.IMAGE_SUFFIX}"
+                full_prompt = f"{config.IMAGE_PREFIX} {prompt}, {config.IMAGE_SUFFIX}"
             else:
                 full_prompt = prompt
 

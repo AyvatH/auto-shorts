@@ -218,7 +218,9 @@ def complete_missing_items(
                         logger.info(f"Görsel {idx} oluşturuluyor...")
                         previous_count = acc._count_generated_images()
 
-                        if not acc.send_prompt(img_prompt):
+                        # Görsel promptuna prefix ekle
+                        full_img_prompt = f"{config.IMAGE_PREFIX} {img_prompt}, {config.IMAGE_SUFFIX}"
+                        if not acc.send_prompt(full_img_prompt):
                             logger.error(f"Görsel {idx} prompt gönderilemedi")
                             continue
 
@@ -272,7 +274,9 @@ def complete_missing_items(
                     try:
                         previous_count = acc._count_generated_images()
 
-                        if not acc.send_prompt(img_prompt):
+                        # Görsel promptuna prefix ekle
+                        full_img_prompt = f"{config.IMAGE_PREFIX} {img_prompt}, {config.IMAGE_SUFFIX}"
+                        if not acc.send_prompt(full_img_prompt):
                             logger.error(f"Görsel {idx} prompt gönderilemedi")
                             continue
 
