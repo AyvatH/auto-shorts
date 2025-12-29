@@ -2194,10 +2194,18 @@ class DailyShortsMode:
                     results["error"] = "Tüm hesapların limiti doldu"
                     break
 
-            if not account.driver:
-                if not account.start_browser() or not account.navigate_to_gemini():
-                    results["retried"].append({"index": i, "success": False, "error": "Tarayıcı hatası"})
+            # Tarayıcı açık ve çalışır durumda mı kontrol et
+            if not account.is_browser_alive():
+                logger.info(f"[{i}] Tarayıcı kapalı, başlatılıyor...")
+                account.close_browser()  # Eski oturumu temizle
+                time.sleep(1)
+                if not account.start_browser():
+                    results["retried"].append({"index": i, "success": False, "error": "Tarayıcı başlatılamadı"})
                     continue
+                if not account.navigate_to_gemini():
+                    results["retried"].append({"index": i, "success": False, "error": "Gemini'ye gidilemedi"})
+                    continue
+                time.sleep(3)  # Sayfa yüklenmesi için bekle
 
             retry_result = {"index": i, "success": False}
 
