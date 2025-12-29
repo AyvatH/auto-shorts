@@ -344,7 +344,7 @@ style: "friendly"
 3D exploded diagram | smooth layer animation
 ..."></textarea>
                         <div id="geminiProPromptCount" style="color: #a1a1aa; font-size: 0.8rem; margin-top: 0.5rem;">
-                            0 prompt girildi (Max: 9 shorts / 63 uzun video)
+                            0 prompt girildi
                         </div>
                     </div>
 
@@ -1339,7 +1339,8 @@ style: "friendly"
             const textarea = document.getElementById('geminiProPrompts');
             const text = textarea.value;
             const mode = document.querySelector('input[name="geminiProMode"]:checked').value;
-            const max = mode === 'shorts' ? 9 : 63;
+            const maxDaily = geminiProConfig.max_daily_videos || 12;
+            const max = mode === 'shorts' ? maxDaily : maxDaily * 7;
             const countEl = document.getElementById('geminiProPromptCount');
 
             let count = 0;
@@ -1470,7 +1471,8 @@ style: "friendly"
                 return;
             }
 
-            const maxPrompts = mode === 'shorts' ? 9 : 63;
+            const maxDaily = geminiProConfig.max_daily_videos || 12;
+            const maxPrompts = mode === 'shorts' ? maxDaily : maxDaily * 7;
             if (prompts.length > maxPrompts) {
                 alert(`Maksimum ${maxPrompts} prompt girebilirsiniz.`);
                 return;

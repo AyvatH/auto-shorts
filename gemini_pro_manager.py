@@ -1722,10 +1722,11 @@ class DailyShortsMode:
         self.format_desc = image_format_descriptions.get(aspect_format, image_format_descriptions["9:16"])
         self.video_format_desc = video_format_descriptions.get(aspect_format, video_format_descriptions["9:16"])
 
-        if len(prompts) > 9:
-            return {"error": "Günde maksimum 9 video oluşturulabilir"}
-
         capacity = self.manager.get_daily_capacity()
+        max_daily = config.get_max_daily_videos()
+
+        if len(prompts) > max_daily:
+            return {"error": f"Günde maksimum {max_daily} video oluşturulabilir"}
         if capacity["total_remaining"] < len(prompts):
             return {"error": f"Yetersiz kapasite. Kalan: {capacity['total_remaining']}, İstenen: {len(prompts)}"}
 
