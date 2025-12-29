@@ -271,6 +271,11 @@ class GeminiProAccount:
     def send_prompt(self, prompt: str) -> bool:
         """Prompt gönder"""
         try:
+            # Önce tarayıcı kontrolü
+            if not self.is_browser_alive():
+                logger.error("Tarayıcı çalışmıyor, prompt gönderilemez")
+                return False
+
             self._update_progress(f"Prompt gönderiliyor: {prompt[:50]}...", 30)
             time.sleep(3)
 
@@ -419,6 +424,11 @@ class GeminiProAccount:
     def upload_and_prompt(self, image_path: str, prompt: str) -> bool:
         """Görsel upload et ve prompt gönder - geliştirilmiş versiyon"""
         try:
+            # Önce tarayıcı kontrolü
+            if not self.is_browser_alive():
+                logger.error("Tarayıcı çalışmıyor, upload yapılamaz")
+                return False
+
             self._update_progress(f"Görsel upload ediliyor: {os.path.basename(image_path)}", 40)
             time.sleep(1)
 
@@ -1808,8 +1818,13 @@ class DailyShortsMode:
 
             logger.info(f"[{i}] Hesap {account.account_id} kullanılıyor (kullanım: {account.daily_usage}/3)")
 
-            # Hesap tarayıcısı açık değilse aç
-            if not account.driver:
+            # Hesap tarayıcısı açık ve çalışır durumda mı kontrol et
+            if not account.is_browser_alive():
+                logger.info(f"[{i}] Tarayıcı kapalı veya çökmüş, yeniden başlatılıyor...")
+                # Önceki oturumu temizle
+                account.close_browser()
+                time.sleep(2)  # Biraz bekle
+
                 if not account.start_browser():
                     results["videos"].append({
                         "index": i,
@@ -1825,6 +1840,9 @@ class DailyShortsMode:
                         "error": "Gemini'ye gidilemedi"
                     })
                     continue
+
+                # Sayfa yüklenmesi için bekle
+                time.sleep(3)
 
             video_result = {
                 "index": i,
@@ -1851,6 +1869,9 @@ class DailyShortsMode:
                 if not account.send_prompt(full_image_prompt):
                     video_result["error"] = "Görsel prompt gönderilemedi"
                     results["videos"].append(video_result)
+                    # Tarayıcı problemi olabilir, kapat ki sonraki iterasyonda yeniden başlasın
+                    if not account.is_browser_alive():
+                        account.close_browser()
                     continue
 
                 # Görsel oluşturulmasını bekle
@@ -1911,6 +1932,9 @@ class DailyShortsMode:
                 if not account.upload_and_prompt(cleaned_image_path, full_video_prompt):
                     video_result["error"] = "Görsel yüklenemedi veya video prompt gönderilemedi"
                     results["videos"].append(video_result)
+                    # Tarayıcı problemi olabilir
+                    if not account.is_browser_alive():
+                        account.close_browser()
                     continue
 
                 self.manager._update_progress(f"[{i}] Video oluşturuluyor ({self.aspect_format})...", 35 + (i * 8))
@@ -1973,6 +1997,13 @@ class DailyShortsMode:
                 traceback.print_exc()
                 video_result["error"] = str(e)
                 self._update_status(project_dir, project_data, i, "failed")
+
+                # Tarayıcı hatası ise, sonraki iterasyonda yeniden başlatılsın
+                error_str = str(e).lower()
+                if any(x in error_str for x in ['session', 'disconnected', 'browser', 'closed', 'invalid']):
+                    logger.warning(f"[{i}] Tarayıcı hatası tespit edildi, kapatılıyor...")
+                    account.close_browser()
+                    time.sleep(3)
 
             results["videos"].append(video_result)
 
